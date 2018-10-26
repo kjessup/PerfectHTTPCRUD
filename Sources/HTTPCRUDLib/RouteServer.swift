@@ -158,6 +158,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 					channel.close(promise: nil)
 				}
 			}
+			writeState = .none
+			readState = .none
+			head = nil
 			channel.writeAndFlush(wrapOutboundOut(.end(nil)), promise: p)
 		}
 	}

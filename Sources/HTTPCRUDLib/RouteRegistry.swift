@@ -89,6 +89,9 @@ public extension RouteRegistry {
 			}
 		)
 	}
+	func path<NewOut>(_ name: String, _ call: @escaping () throws -> NewOut) -> RouteRegistry<InType, NewOut> {
+		return path(name, {_ in return try call()})
+	}
 	func wild<NewOut>(_ call: @escaping (OutType, String) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
 		typealias RetType = RouteRegistry<InType, NewOut>
 		return .init(
@@ -127,6 +130,10 @@ public extension RouteRegistry {
 	subscript<NewOut>(dynamicMember name: String) -> (@escaping (OutType) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
 		typealias RegType = RouteRegistry<OutType, NewOut>
 		return {self.path(name, $0)}
+	}
+	subscript<NewOut>(dynamicMember name: String) -> (@escaping () throws -> NewOut) -> RouteRegistry<InType, NewOut> {
+		typealias RegType = RouteRegistry<OutType, NewOut>
+		return { call in self.path(name, { _ in return try call()})}
 	}
 }
 
