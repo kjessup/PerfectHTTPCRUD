@@ -52,6 +52,8 @@ struct TextOutput<C: CustomStringConvertible>: HTTPOutput {
 }
 
 final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
+	static let handlerQueue = DispatchQueue(label: "handlers", qos: DispatchQoS.userInitiated, attributes: DispatchQueue.Attributes.concurrent, autoreleaseFrequency: DispatchQueue.AutoreleaseFrequency.inherit, target: nil)
+	
 	var method: HTTPMethod { return head?.method ?? .GET }
 	var uri: String { return head?.uri ?? "" }
 	var headers: HTTPHeaders { return head?.headers ?? .init() }
@@ -89,22 +91,24 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		readState = .head
 		self.head = head
 		let uri = head.uri
-		if let fnc = finder[uri] {
-			let state = HandlerState(request: self, uri: uri)
-			do {
-				flush(output: try fnc(state, self))
-			} catch {
+//		NIOHTTPHandler.handlerQueue.async {
+			if let fnc = self.finder[uri] {
+				let state = HandlerState(request: self, uri: uri)
+				do {
+					self.flush(output: try fnc(state, self))
+				} catch {
+					let out = DefaultHTTPOutput()
+					out.status = .internalServerError
+					out.body = Array("Error caught: \(error)".utf8)
+					self.flush(output: out)
+				}
+			} else {
 				let out = DefaultHTTPOutput()
-				out.status = .internalServerError
-				out.body = Array("Error caught: \(error)".utf8)
-				flush(output: out)
+				out.status = .notFound
+				out.body = Array("No route for URI.".utf8)
+				self.flush(output: out)
 			}
-		} else {
-			let out = DefaultHTTPOutput()
-			out.status = .notFound
-			out.body = Array("No route for URI.".utf8)
-			flush(output: out)
-		}
+//		}
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {
 		readState = .body
@@ -190,7 +194,7 @@ class NIOBoundRoutes: BoundRoutes {
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
 			.childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
 			.childChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
+			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 10)
 			.childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
 			.childChannelInitializer {
 				channel in
