@@ -91,7 +91,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		readState = .head
 		self.head = head
 		let uri = head.uri
-//		NIOHTTPHandler.handlerQueue.async {
+		NIOHTTPHandler.handlerQueue.async {
 			if let fnc = self.finder[uri] {
 				let state = HandlerState(request: self, uri: uri)
 				do {
@@ -108,7 +108,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 				out.body = Array("No route for URI.".utf8)
 				self.flush(output: out)
 			}
-//		}
+		}
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {
 		readState = .body
