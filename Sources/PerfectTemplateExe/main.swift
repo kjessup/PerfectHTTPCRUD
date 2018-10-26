@@ -23,4 +23,5 @@ let routes = root().dir{[
 ]}
 
 let server = try routes.bind(port: 9000).listen()
+print("Server listening on port 9000")
 try server.wait()
