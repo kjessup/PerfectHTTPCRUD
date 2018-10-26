@@ -16,7 +16,7 @@ let package = Package(
 	],
 	targets: [
 		.target(name: "PerfectTemplateExe", dependencies: ["HTTPCRUDLib"]),
-		.target(name: "HTTPCRUDLib", dependencies: ["PerfectMustache", "PerfectCRUD", "NIOHTTP1"]),
+		.target(name: "HTTPCRUDLib", dependencies: ["PerfectMustache", "PerfectCRUD", "NIOHTTP1", "PerfectSQLite"]),
 		.testTarget(name: "HTTPCRUDLibTests", dependencies: ["HTTPCRUDLib"]),
 	]
 )

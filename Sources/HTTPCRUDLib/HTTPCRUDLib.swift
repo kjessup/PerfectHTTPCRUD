@@ -17,8 +17,8 @@ extension String {
 		}
 		return self + "/" + name.split(separator: "/").joined(separator: "/")
 	}
-	var cleanedComponents: String {
-		return components.joined(separator: "/")
+	var cleanedPath: String {
+		return "/" + components.joined(separator: "/")
 	}
 	var componentBase: String? {
 		return self.components.first

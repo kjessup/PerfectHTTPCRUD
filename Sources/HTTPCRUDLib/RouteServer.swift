@@ -182,7 +182,7 @@ class NIOBoundRoutes: BoundRoutes {
 	public let port: Int
 	public let address: String
 	init(registry: RegistryType, port: Int, address: String) throws {
-		let finder = try RouteFinderRegExp(registry)
+		let finder = try RouteFinderDual(registry)
 		self.port = port
 		self.address = address
 		let bootstrap = ServerBootstrap(group: group)

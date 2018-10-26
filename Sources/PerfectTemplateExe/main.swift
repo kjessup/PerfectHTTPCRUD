@@ -1,4 +1,7 @@
 import HTTPCRUDLib
+import PerfectCRUD
+
+CRUDLogging.queryLogDestinations = []
 
 let big1024 = String(repeating: "A", count: 1024)
 let big2048 = String(repeating: "A", count: 2048)
