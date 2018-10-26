@@ -9,6 +9,7 @@ import PerfectHTTP
 import Foundation
 import PerfectSQLite
 import PerfectCRUD
+import NIOConcurrencyHelpers
 
 protocol RouteFinder {
 	typealias ResolveFunc = (HandlerState, HTTPRequest) throws -> HTTPOutput
@@ -19,16 +20,28 @@ protocol RouteFinder {
 class RouteFinderRegExp: RouteFinder {
 	typealias Matcher = (NSRegularExpression, ResolveFunc)
 	let matchers: [Matcher]
+	var cached1 = Atomic<Int>(value: -1)
 	required init(_ registry: RouteRegistry<HTTPRequest, HTTPOutput>) throws {
-		matchers = try registry.routes.map { (try RouteFinderRegExp.regExp(for: $0.path), $0.resolve) }
+		matchers = try registry.routes.filter {
+			($0.path.components.contains("*") || $0.path.components.contains("**"))
+		}.map { (try RouteFinderRegExp.regExp(for: $0.path), $0.resolve) }
 	}
 	subscript(uri: String) -> ResolveFunc? {
 		let uriRange = NSRange(location: 0, length: uri.count)
-		for matcher in matchers {
-			guard let match = matcher.0.firstMatch(in: uri, range: uriRange) else {
+		do {
+			let c1 = cached1.load()
+			if c1 != -1 {
+				if let _ = matchers[c1].0.firstMatch(in: uri, range: uriRange) {
+					return matchers[c1].1
+				}
+			}
+		}
+		for i in 0..<matchers.count {
+			let matcher = matchers[i]
+			guard let _ = matcher.0.firstMatch(in: uri, range: uriRange) else {
 				continue
 			}
-			// ranges/wildcards
+			cached1.store(i)
 			return matcher.1
 		}
 		return nil

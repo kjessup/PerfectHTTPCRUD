@@ -138,6 +138,10 @@ public extension RouteRegistry {
 }
 
 public extension RouteRegistry {
+	func dir<NewOut>(_ call: (RouteRegistry<OutType, OutType>) -> [RouteRegistry<OutType, NewOut>])  -> RouteRegistry<InType, NewOut> {
+		let root = RouteRegistry<OutType, OutType>([.init(path: "/", resolve: {$1})])
+		return append(call(root))
+	}
 	func append<NewOut>(_ registry: RouteRegistry<OutType, NewOut>) -> RouteRegistry<InType, NewOut> {
 		return .init(routes.flatMap {
 			item in
@@ -162,6 +166,9 @@ public extension RouteRegistry {
 	}
 	func then<NewOut>(_ call: @escaping (OutType) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
 		return then {try call($1)}
+	}
+	func then<NewOut>(_ call: @escaping () throws -> NewOut) -> RouteRegistry<InType, NewOut> {
+		return then {_ in return try call()}
 	}
 	func request<NewOut>(_ call: @escaping (OutType, HTTPRequest) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
 		return then {try call($1, $0.request)}

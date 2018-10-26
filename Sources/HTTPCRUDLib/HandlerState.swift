@@ -24,13 +24,26 @@ class HandlerState {
 	let request: HTTPRequest
 	var response = DefaultHTTPOutput()
 	var currentComponent: String?
-	var gen: IndexingIterator<[String]>
+	let uri: [Character]
+	var genRange: Array<Character>.Index
 	init(request: HTTPRequest, uri: String) {
 		self.request = request
-		gen = uri.split(separator: "/").map(String.init).makeIterator()
-		currentComponent = gen.next()
+		self.uri = Array(uri)
+		genRange = self.uri.startIndex
+		advanceComponent()
 	}
 	func advanceComponent() {
-		currentComponent = gen.next()
+		while genRange < uri.endIndex && uri[genRange] == "/" {
+			genRange = uri.index(after: genRange)
+		}
+		guard genRange < uri.endIndex else {
+			currentComponent = nil
+			return
+		}
+		let sRange = genRange
+		while genRange < uri.endIndex && uri[genRange] != "/" {
+			genRange = uri.index(after: genRange)
+		}
+		currentComponent = String(uri[sRange..<genRange])
 	}
 }

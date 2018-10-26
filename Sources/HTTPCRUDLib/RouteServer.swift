@@ -176,7 +176,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 
 class NIOBoundRoutes: BoundRoutes {
 	typealias RegistryType = RouteRegistry<HTTPRequest, HTTPOutput>
-	private let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+	private let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount * 2)
 	private let channel: Channel
 	
 	public let port: Int
