@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
 	name: "PerfectHTTPCRUD",
 	products: [
-		.executable(name: "PerfectTemplate", targets: ["PerfectTemplateExe"]),
+		.executable(name: "PerfectHTTPCRUD", targets: ["PerfectHTTPCRUDExe"]),
 		.library(name: "HTTPCRUDLib", targets: ["HTTPCRUDLib"]),
 	],
 	dependencies: [
@@ -15,7 +15,7 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-nio.git", from: "1.9.0")
 	],
 	targets: [
-		.target(name: "PerfectTemplateExe", dependencies: ["HTTPCRUDLib"]),
+		.target(name: "PerfectHTTPCRUDExe", dependencies: ["HTTPCRUDLib"]),
 		.target(name: "HTTPCRUDLib", dependencies: ["PerfectMustache", "PerfectCRUD", "NIOHTTP1", "PerfectSQLite"]),
 		.testTarget(name: "HTTPCRUDLibTests", dependencies: ["HTTPCRUDLib"]),
 	]
