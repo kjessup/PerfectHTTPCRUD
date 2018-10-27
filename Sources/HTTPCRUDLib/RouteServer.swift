@@ -91,23 +91,21 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		readState = .head
 		self.head = head
 		let uri = head.uri
-		NIOHTTPHandler.handlerQueue.async {
-			if let fnc = self.finder[uri] {
-				let state = HandlerState(request: self, uri: uri)
-				do {
-					self.flush(output: try fnc(state, self))
-				} catch {
-					let out = DefaultHTTPOutput()
-					out.status = .internalServerError
-					out.body = Array("Error caught: \(error)".utf8)
-					self.flush(output: out)
-				}
-			} else {
+		if let fnc = self.finder[uri] {
+			let state = HandlerState(request: self, uri: uri)
+			do {
+				self.flush(output: try fnc(state, self))
+			} catch {
 				let out = DefaultHTTPOutput()
-				out.status = .notFound
-				out.body = Array("No route for URI.".utf8)
+				out.status = .internalServerError
+				out.body = Array("Error caught: \(error)".utf8)
 				self.flush(output: out)
 			}
+		} else {
+			let out = DefaultHTTPOutput()
+			out.status = .notFound
+			out.body = Array("No route for URI.".utf8)
+			self.flush(output: out)
 		}
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {
@@ -178,6 +176,35 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 //	}
 }
 
+func configureHTTPServerPipeline(pipeline: ChannelPipeline,
+								 first: Bool = false,
+								 withPipeliningAssistance pipelining: Bool = true,
+								 withServerUpgrade upgrade: HTTPUpgradeConfiguration? = nil,
+								 withErrorHandling errorHandling: Bool = false) -> EventLoopFuture<Void> {
+	let responseEncoder = HTTPResponseEncoder()
+	let requestDecoder = HTTPRequestDecoder(leftOverBytesStrategy: upgrade == nil ? .dropBytes : .forwardBytes)
+	
+	var handlers: [ChannelHandler] = [responseEncoder, requestDecoder]
+	
+	if pipelining {
+		handlers.append(HTTPServerPipelineHandler())
+	}
+	
+//	if errorHandling {
+//		handlers.append(HTTPServerProtocolErrorHandler())
+//	}
+	
+//	if let (upgraders, completionHandler) = upgrade {
+//		let upgrader = HTTPServerUpgradeHandler(upgraders: upgraders,
+//												httpEncoder: responseEncoder,
+//												extraHTTPHandlers: Array(handlers.dropFirst()),
+//												upgradeCompletionHandler: completionHandler)
+//		handlers.append(upgrader)
+//	}
+	
+	return pipeline.addHandlers(handlers, first: first)
+}
+
 class NIOBoundRoutes: BoundRoutes {
 	typealias RegistryType = RouteRegistry<HTTPRequest, HTTPOutput>
 	private let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount * 2)
@@ -194,11 +221,11 @@ class NIOBoundRoutes: BoundRoutes {
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
 			.childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
 			.childChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 10)
+			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 72)
 			.childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
 			.childChannelInitializer {
 				channel in
-				channel.pipeline.configureHTTPServerPipeline(withErrorHandling: true)
+				configureHTTPServerPipeline(pipeline: channel.pipeline)
 				.then {
 					channel.pipeline.add(handler: NIOHTTPHandler(finder: finder))
 				}

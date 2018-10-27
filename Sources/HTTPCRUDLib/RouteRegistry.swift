@@ -92,6 +92,38 @@ public extension RouteRegistry {
 	func path<NewOut>(_ name: String, _ call: @escaping () throws -> NewOut) -> RouteRegistry<InType, NewOut> {
 		return path(name, {_ in return try call()})
 	}
+	
+	func ext(_ ext: String) -> RouteRegistry {
+		let ext = ext.ext
+		return .init(
+			routes.map {
+				item in
+				return RouteItem(path: item.path + ext,
+								 resolve: item.resolve)
+			}
+		)
+	}
+	func ext<NewOut>(_ ext: String,
+					 contentType: String? = nil,
+					 _ call: @escaping (OutType) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
+		let ext = ext.ext
+		typealias RetType = RouteRegistry<InType, NewOut>
+		return .init(
+			routes.map {
+				item in
+				return RetType.RouteItem(path: item.path + ext,
+										 resolve: {
+											state, i throws -> NewOut in
+											let o = try call(item.resolve(state, i))
+											if let ct = contentType, !ct.isEmpty {
+												state.response.headers?.replaceOrAdd(name: "content-type", value: ct)
+											}
+											return o
+				})
+			}
+		)
+	}
+	
 	func wild<NewOut>(_ call: @escaping (OutType, String) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
 		typealias RetType = RouteRegistry<InType, NewOut>
 		return .init(

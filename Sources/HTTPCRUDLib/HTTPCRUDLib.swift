@@ -26,6 +26,12 @@ extension String {
 	var componentName: String? {
 		return self.components.last
 	}
+	var ext: String {
+		if self.first != "." {
+			return "." + self
+		}
+		return self
+	}
 }
 
 public enum TerminationType: Error {

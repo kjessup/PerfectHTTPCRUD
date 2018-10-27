@@ -1,86 +1,11 @@
 import XCTest
-import PerfectHTTP
-import PerfectNet
+import NIOHTTP1
 @testable import HTTPCRUDLib
 
 class ShimHTTPRequest: HTTPRequest {
-	var method = HTTPMethod.get
-	var path = "/"
-	var pathComponents: [String] { return [""] }
-	var queryParams = [(String, String)]()
-	var protocolVersion = (1, 1)
-	var remoteAddress = (host: "127.0.0.1", port: 8000 as UInt16)
-	var serverAddress = (host: "127.0.0.1", port: 8282 as UInt16)
-	var serverName = "my_server"
-	var documentRoot = "./webroot"
-	var connection = NetTCP()
-	var urlVariables = [String:String]()
-	var scratchPad = [String:Any]()
-	func header(_ named: HTTPRequestHeader.Name) -> String? { return nil }
-	func addHeader(_ named: HTTPRequestHeader.Name, value: String) {}
-	func setHeader(_ named: HTTPRequestHeader.Name, value: String) {}
-	var headers = AnyIterator<(HTTPRequestHeader.Name, String)> { return nil }
-	var postParams = [(String, String)]()
-	var postBodyBytes: [UInt8]? = nil
-	var postBodyString: String? = nil
-	var postFileUploads: [MimeReader.BodySpec]? = nil
-}
-
-class ShimHTTPResponse: HTTPResponse {
-	var request: HTTPRequest = ShimHTTPRequest()
-	var status: HTTPResponseStatus = .ok
-	var isStreaming = false
-	var bodyBytes = [UInt8]()
-	var bodyString: String {
-		return String(data: Data(bytes: bodyBytes), encoding: .utf8)!
-	}
-	var headerStore = Array<(HTTPResponseHeader.Name, String)>()
-	func header(_ named: HTTPResponseHeader.Name) -> String? {
-		for (n, v) in headerStore where n == named {
-			return v
-		}
-		return nil
-	}
-	@discardableResult
-	func addHeader(_ name: HTTPResponseHeader.Name, value: String) -> Self {
-		headerStore.append((name, value))
-		return self
-	}
-	@discardableResult
-	func setHeader(_ name: HTTPResponseHeader.Name, value: String) -> Self {
-		var fi = [Int]()
-		for i in 0..<headerStore.count {
-			let (n, _) = headerStore[i]
-			if n == name {
-				fi.append(i)
-			}
-		}
-		fi = fi.reversed()
-		for i in fi {
-			headerStore.remove(at: i)
-		}
-		return addHeader(name, value: value)
-	}
-	var headers: AnyIterator<(HTTPResponseHeader.Name, String)> {
-		var g = self.headerStore.makeIterator()
-		return AnyIterator<(HTTPResponseHeader.Name, String)> {
-			g.next()
-		}
-	}
-	func addCookie(_: PerfectHTTP.HTTPCookie) -> Self { return self }
-	func appendBody(bytes: [UInt8]) {}
-	func appendBody(string: String) {}
-	func setBody(json: [String:Any]) throws {}
-	func push(callback: @escaping (Bool) -> ()) {}
-	func completed() {}
-	func next() {
-		if let f = handlers?.removeFirst() {
-			f(request, self)
-		}
-	}
-	
-	// shim shim
-	var handlers: [RequestHandler]?
+	var method = HTTPMethod.GET
+	var uri = ""
+	var headers = HTTPHeaders()
 }
 
 final class HTTPCRUDLibTests: XCTestCase {
