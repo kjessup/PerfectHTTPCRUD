@@ -1,5 +1,6 @@
 import HTTPCRUDLib
 import PerfectCRUD
+import NIO
 
 CRUDLogging.queryLogDestinations = []
 
@@ -23,5 +24,5 @@ let routes = root().dir{[
 ]}.text()
 
 let server = try routes.bind(port: 9000).listen()
-print("Server listening on port 9000")
+print("Server listening on port 9000 with \(System.coreCount) cores")
 try server.wait()
