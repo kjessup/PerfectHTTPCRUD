@@ -219,10 +219,11 @@ class NIOBoundRoutes: BoundRoutes {
 		self.address = address
 		let bootstrap = ServerBootstrap(group: acceptGroup, childGroup: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
+			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 72)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
 			.childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
 			.childChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 72)
+			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
 			.childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
 			.childChannelInitializer {
 				channel in
