@@ -208,6 +208,7 @@ func configureHTTPServerPipeline(pipeline: ChannelPipeline,
 class NIOBoundRoutes: BoundRoutes {
 	typealias RegistryType = RouteRegistry<HTTPRequest, HTTPOutput>
 	private let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount * 2)
+	private let acceptGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
 	private let channel: Channel
 	
 	public let port: Int
@@ -216,7 +217,7 @@ class NIOBoundRoutes: BoundRoutes {
 		let finder = try RouteFinderDual(registry)
 		self.port = port
 		self.address = address
-		let bootstrap = ServerBootstrap(group: group)
+		let bootstrap = ServerBootstrap(group: acceptGroup, childGroup: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
 			.childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
