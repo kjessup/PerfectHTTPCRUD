@@ -1,6 +1,8 @@
 import XCTest
 import NIOHTTP1
 import NIO
+import PerfectSQLite
+import PerfectCRUD
 @testable import HTTPCRUDLib
 
 class ShimHTTPRequest: HTTPRequest {
@@ -20,6 +22,11 @@ class ShimHTTPRequest: HTTPRequest {
 	var headers = HTTPHeaders()
 	func readBody(_ call: @escaping (ByteBuffer?) -> ()) {
 		call(nil)
+	}
+	
+	func run(finder: RouteFinder) throws -> HTTPOutput? {
+		let state = HandlerState(request: self, uri: path)
+		return try finder[path]?(state, self)
 	}
 }
 
@@ -166,13 +173,10 @@ final class HTTPCRUDLibTests: XCTestCase {
 		let finder = try! RouteFinderDual(uri)
 		let uu = UUID().uuidString
 		let uri1 = "/v1/\(uu)/share"
-		if let fnd = finder[uri1] {
-			let request = ShimHTTPRequest()
-			let state = HandlerState(request: request, uri: uri1)
-			let output = try! fnd(state, request)
-			XCTAssertEqual("\(uu) - share", String(validatingUTF8: output.body ?? [])!)
-		}
-		
+		let request = ShimHTTPRequest()
+		request.uri = uri1
+		let output = try! request.run(finder: finder)!
+		XCTAssertEqual("\(uu) - share", String(validatingUTF8: output.body ?? [])!)
 	}
 	
 	func testToDo() {

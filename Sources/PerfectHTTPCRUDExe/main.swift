@@ -23,6 +23,6 @@ let routes = root().dir{[
 //	$0.foo.wild {$1}.bar6 { $0 },
 ]}.text()
 
-let server = try routes.bind(port: 9000).listen()
+let servers = try (0...System.coreCount).map { _ in return try routes.bind(port: 9000).listen() }
 print("Server listening on port 9000 with \(System.coreCount) cores")
-try server.wait()
+try servers.map { try $0.wait() }
