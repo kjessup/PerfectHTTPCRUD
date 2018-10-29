@@ -140,6 +140,22 @@ public extension RouteRegistry {
 			}
 		)
 	}
+	func wild(name: String) -> RouteRegistry {
+		typealias RetType = RouteRegistry<InType, OutType>
+		return .init(
+			routes.map {
+				item in
+				return RetType.RouteItem(path: item.path.appending(component: "*"),
+										 resolve: {
+											state, i throws -> OutType in
+											let o = try item.resolve(state, i)
+											state.request.uriVariables[name] = state.currentComponent ?? "-error-"
+											state.advanceComponent()
+											return o
+				})
+			}
+		)
+	}
 	func trailing<NewOut>(_ call: @escaping (OutType, String) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
 		typealias RetType = RouteRegistry<InType, NewOut>
 		return .init(
@@ -173,6 +189,13 @@ public extension RouteRegistry {
 	func dir<NewOut>(_ call: (RouteRegistry<OutType, OutType>) -> [RouteRegistry<OutType, NewOut>])  -> RouteRegistry<InType, NewOut> {
 		let root = RouteRegistry<OutType, OutType>([.init(path: "/", resolve: {$1})])
 		return append(call(root))
+	}
+	// !FIX! decide between dir vs. append
+	func dir<NewOut>(_ registries: [RouteRegistry<OutType, NewOut>]) -> RouteRegistry<InType, NewOut> {
+		return .init(registries.flatMap { self.append($0).routes })
+	}
+	func dir<NewOut>(_ registry: RouteRegistry<OutType, NewOut>, _ registries: RouteRegistry<OutType, NewOut>...) -> RouteRegistry<InType, NewOut> {
+		return .init(append(registry).routes + registries.flatMap { self.append($0).routes })
 	}
 	func append<NewOut>(_ registry: RouteRegistry<OutType, NewOut>) -> RouteRegistry<InType, NewOut> {
 		return .init(routes.flatMap {
@@ -216,21 +239,20 @@ public extension RouteRegistry {
 			}
 		}
 	}
-//	func decode<Type: Decodable, NewOut>(_ type: Type.Type, _ handler: @escaping (OutType, Type) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-//		return then {
-//			state, i in
-//			return try handler(i, try state.request.decode(Type.self))
-//		}
-//	}
+	func decode<Type: Decodable, NewOut>(_ type: Type.Type,
+										 _ handler: @escaping (OutType, Type) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
+		return then {
+			state, i in
+			return try handler(i, try state.request.decode(Type.self))
+		}
+	}
+	func decode<Type: Decodable>(_ type: Type.Type) -> RouteRegistry<InType, Type> {
+		return then {
+			state, i in
+			return try state.request.decode(Type.self)
+		}
+	}
 }
-
-//func +<In, Out>(lhs: RouteRegistry<In, Out>, rhs: RouteRegistry<In, Out>) -> RouteRegistry<In, Out> {
-//	return lhs.combine(rhs)
-//}
-//
-//func +<In, Out>(lhs: RouteRegistry<In, Out>, rhs: [RouteRegistry<In, Out>]) -> RouteRegistry<In, Out> {
-//	return rhs.reduce(lhs, +)
-//}
 
 public extension RouteRegistry where OutType: Encodable {
 	func json() -> RouteRegistry<InType, HTTPOutput> {
@@ -250,20 +272,24 @@ public extension RouteRegistry where OutType: CustomStringConvertible {
 	}
 }
 
-public func root() -> RouteRegistry<HTTPRequest, HTTPRequest> {
+public func root(path: String = "/") -> RouteRegistry<HTTPRequest, HTTPRequest> {
 	return .init([
-		.init(path: "/", resolve: {
+		.init(path: path, resolve: {
 			(_, t: HTTPRequest) throws -> HTTPRequest in
 			return t
 		})
 	])
 }
 
-public func root<NewOut>(_ call: @escaping (HTTPRequest) throws -> NewOut) -> RouteRegistry<HTTPRequest, NewOut> {
+public func root<NewOut>(path: String = "/", _ call: @escaping (HTTPRequest) throws -> NewOut) -> RouteRegistry<HTTPRequest, NewOut> {
 	return .init([
-		.init(path: "/", resolve: {
+		.init(path: path, resolve: {
 			(_, t: HTTPRequest) throws -> NewOut in
 			return try call(t)
 		})
 	])
+}
+
+public func root<NewOut>(path: String = "/", _ type: NewOut.Type) -> RouteRegistry<NewOut, NewOut> {
+	return .init([.init(path: "/", resolve: {$1})])
 }

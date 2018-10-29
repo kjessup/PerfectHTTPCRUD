@@ -32,10 +32,24 @@ extension String {
 		}
 		return self
 	}
+	var splitQuery: (String, String?) {
+		let splt = split(separator: "?").map(String.init)
+		return (splt.first ?? "/", splt.count > 1 ? splt[1] : nil)
+	}
+	var decodedQuery: [(String, String)] {
+		return split(separator: "&").map {
+			let s = $0.split(separator: "=").map(String.init)
+			return ((s.first ?? "").stringByDecodingURL ?? "",  (s.count > 1 ? s[1] : "").stringByDecodingURL ?? "")
+		}
+	}
+	var splitUri: (String, [(String, String)]) {
+		let s1 = splitQuery
+		return (s1.0, s1.1?.decodedQuery ?? [])
+	}
 }
 
 public enum TerminationType: Error {
-	case error(Error)
+	case error(HTTPOutputError)
 	case criteriaFailed
 	case internalError
 }

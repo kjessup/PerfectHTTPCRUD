@@ -1,27 +1,98 @@
 import XCTest
 import NIOHTTP1
+import NIO
 @testable import HTTPCRUDLib
 
 class ShimHTTPRequest: HTTPRequest {
+	var path = ""
+	var searchArgs: [(String, String)] = []
+	var contentLength: Int = 0
+	var contentRead: Int = 0
+	var uriVariables: [String : String] = [:]
 	var method = HTTPMethod.GET
-	var uri = ""
+	var uri = "" {
+		didSet {
+			let (p, a) = uri.splitUri
+			path = p
+			searchArgs = a
+		}
+	}
 	var headers = HTTPHeaders()
+	func readBody(_ call: @escaping (ByteBuffer?) -> ()) {
+		call(nil)
+	}
 }
 
 final class HTTPCRUDLibTests: XCTestCase {
     func testScratch() {
+		let uris = ["/v1/device/register",
+					"/v1/device/unregister",
+					"/v1/device/limits",
+					"/v1/device/update",
+					"/v1/device/share",
+					"/v1/device/share/token",
+					"/v1/device/unshare",
+					"/v1/device/obs/delete",
+					"/v1/device/limits",
+					"/v1/device/list",
+					"/v1/device/info",
+					"/v1/device/obs",
+					"/v1/group/create",
+					"/v1/group/device/add",
+					"/v1/group/device/remove",
+					"/v1/group/delete",
+					"/v1/group/update",
+					"/v1/group/device/list",
+					"/v1/group/list"]
+		struct DeviceRequest: Codable {
+			let id: UUID
+		}
+		struct GroupRequest: Codable {
+			let id: UUID?
+			let name: String?
+		}
+		typealias DeviceResponse = DeviceRequest
+		typealias GroupResponse = GroupRequest
 		
-		func p<O>(_ msg: String, _ o: O) -> O {
-			print(msg)
-			return o
+		struct AuthorizedRequest {
+			let token: String
+			init?(_ request: HTTPRequest) {
+				token = "abc"
+			}
 		}
 		
-		let rt = root().foo { p("foo/", $0) }
-		let rt2 = root {p("root/", $0)}.foo.bar { p("bar", $0) }.baz { p("baz", $0) }
-		let rt3 = rt.combine(rt2)
+		let authorizedRoute = root(AuthorizedRequest.init)
+			.statusCheck { nil == $0 ? .unauthorized : .ok }
+			.then { $0! }
 		
-		print(rt3)
-		print(rt3.routes)
+		let deviceRoutes = authorizedRoute
+			.device
+				.decode(DeviceRequest.self)
+				.dir {[
+					$0.register { DeviceResponse(id: $0.id) },
+					$0.share.token { DeviceResponse(id: $0.id) }
+				]}
+		
+		let groupRoutes = authorizedRoute
+			.group
+				.decode(GroupRequest.self)
+				.dir {[
+					$0.create { GroupResponse(id: $0.id, name: $0.name) }
+				]}
+		
+		let v1 = root()
+			.v1.dir(deviceRoutes.json(),
+					groupRoutes.json())
+		
+		let request = ShimHTTPRequest()
+		request.uri = "/v1/device/share/token?id=\(UUID().uuidString)"
+		let uri = request.path
+		let finder = try! RouteFinderDual(v1)
+		if let fnd = finder[uri] {
+			let state = HandlerState(request: request, uri: uri)
+			let output = try! fnd(state, request)
+			print(String(validatingUTF8: output.body ?? [])!)
+		}
 	}
 	
 	func testExample() {
@@ -52,7 +123,7 @@ final class HTTPCRUDLibTests: XCTestCase {
 		let device = authenticatedRoute
 			.device
 			.decode(DeviceRequest.self) { (auth: $0, user: $1) }
-		
+
 		let fullRoutes = root()
 			.v1
 			.append([
@@ -65,23 +136,43 @@ final class HTTPCRUDLibTests: XCTestCase {
 		let fullJson = fullRoutes.path("json").json()
 		let fullText = fullRoutes.path("text").then { "\($0)" }.text()
 		let end = fullText.combine(fullJson)
-		
-		let response = ShimHTTPResponse()
-		let request = response.request as! ShimHTTPRequest
-		request.queryParams = [("id", UUID().uuidString)]
-		
+
+		let request = ShimHTTPRequest()
+		request.uriVariables = ["id":UUID().uuidString]
+
 		let uri1 = "/v1/user/share/json"
 		let uri2 = "/v1/user/FOOBAR/info/json"
 		let uri3 = "/v1/user/info/d/json"
-		
+
 		let finder = try! RouteFinderRegExp(end)
-		
+
 		if let fnd = finder[uri2] {
-			let state = HandlerState(request: request, response: response, uri: uri2)
+			let state = HandlerState(request: request, uri: uri2)
 			let output = try! fnd(state, request)
-			try! output.apply(response: response)
-			print(response.bodyString)
+			print(String(validatingUTF8: output.body ?? [])!)
 		}
+	}
+	
+	func testUriVars() {
+		struct Req: Codable {
+			let id: UUID
+			let action: String
+		}
+		let uri = root().v1
+			.wild(name: "id")
+			.wild(name: "action")
+			.decode(Req.self) { return "\($1.id) - \($1.action)" }
+			.text()
+		let finder = try! RouteFinderDual(uri)
+		let uu = UUID().uuidString
+		let uri1 = "/v1/\(uu)/share"
+		if let fnd = finder[uri1] {
+			let request = ShimHTTPRequest()
+			let state = HandlerState(request: request, uri: uri1)
+			let output = try! fnd(state, request)
+			XCTAssertEqual("\(uu) - share", String(validatingUTF8: output.body ?? [])!)
+		}
+		
 	}
 	
 	func testToDo() {
@@ -98,6 +189,77 @@ final class HTTPCRUDLibTests: XCTestCase {
 		
 		
 		
+	}
+	
+	func testLookup1Timing() {
+		let uris = ["/v1/device/register",
+					"/v1/device/unregister",
+					"/v1/device/limits",
+					"/v1/device/update",
+					"/v1/device/share",
+					"/v1/device/share/token",
+					"/v1/device/unshare",
+					"/v1/device/obs/delete",
+					"/v1/device/limits",
+					"/v1/device/list",
+					"/v1/device/info",
+					"/v1/device/obs",
+					"/v1/group/create",
+					"/v1/group/device/add",
+					"/v1/group/device/remove",
+					"/v1/group/delete",
+					"/v1/group/update",
+					"/v1/group/device/list",
+					"/v1/group/list"]
+		let routes = root().dir({
+			r in
+			return uris.map { r.path($0) {""}.text() }
+		})
+		
+		let lookup1 = try! ReverseLookup(routes)
+		print(lookup1)
+		self.measure {
+			for _ in 0..<10000 {
+				uris.forEach {
+					_ = lookup1[$0]
+				}
+			}
+		}
+	}
+	func testLookup2Timing() {
+		let uris = ["/v1/device/register",
+					"/v1/device/unregister",
+					"/v1/device/limits",
+					"/v1/device/update",
+					"/v1/device/share",
+					"/v1/device/share/token",
+					"/v1/device/unshare",
+					"/v1/device/obs/delete",
+					"/v1/device/limits",
+					"/v1/device/list",
+					"/v1/device/info",
+					"/v1/device/obs",
+					"/v1/group/create",
+					"/v1/group/device/add",
+					"/v1/group/device/remove",
+					"/v1/group/delete",
+					"/v1/group/update",
+					"/v1/group/device/list",
+					"/v1/group/list"]
+		let routes = root().dir {
+			r in
+			return uris.map { r.path($0) {""}.text() }
+		}
+		
+		let lookup2 = try! RouteFinderDictionary(routes)
+		
+		self.measure {
+			for _ in 0..<10000 {
+				uris.forEach {
+					_ = lookup2[$0]
+				}
+			}
+		}
 	}
 
     static var allTests = [

@@ -21,7 +21,7 @@ class DefaultHTTPOutput: HTTPOutput {
 }
 
 class HandlerState {
-	let request: HTTPRequest
+	var request: HTTPRequest
 	var response = DefaultHTTPOutput()
 	var currentComponent: String?
 	let uri: [Character]

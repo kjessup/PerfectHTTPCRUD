@@ -14,12 +14,37 @@ public protocol HTTPRequest {
 	var method: HTTPMethod { get }
 	var uri: String { get }
 	var headers: HTTPHeaders { get }
+	var uriVariables: [String:String] { get set }
+	var path: String { get }
+	var searchArgs: [(String, String)] { get }
+	var contentLength: Int { get }
+	var contentRead: Int { get }
+	func readBody(_ call: @escaping (ByteBuffer?) -> ())
 }
 
 public protocol HTTPOutput {
 	var status: HTTPResponseStatus? { get }
 	var headers: HTTPHeaders? { get }
 	var body: [UInt8]? { get }
+}
+
+public struct HTTPOutputError: HTTPOutput, Error {
+	public let status: HTTPResponseStatus?
+	public let headers: HTTPHeaders?
+	public let body: [UInt8]?
+	public init(status: HTTPResponseStatus,
+		headers: HTTPHeaders? = nil,
+		body: [UInt8]? = nil) {
+		self.status = status
+		self.headers = headers
+		self.body = body
+	}
+	public init(status: HTTPResponseStatus, description: String) {
+		let chars = Array(description.utf8)
+		self.status = status
+		headers = HTTPHeaders([("content-type", "text/plain"), ("content-length", "\(chars.count)")])
+		body = chars
+	}
 }
 
 public protocol ListeningRoutes {
@@ -52,26 +77,38 @@ struct TextOutput<C: CustomStringConvertible>: HTTPOutput {
 }
 
 final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
-	static let handlerQueue = DispatchQueue(label: "handlers", qos: DispatchQoS.userInitiated, attributes: DispatchQueue.Attributes.concurrent, autoreleaseFrequency: DispatchQueue.AutoreleaseFrequency.inherit, target: nil)
+	public typealias InboundIn = HTTPServerRequestPart
+	public typealias OutboundOut = HTTPServerResponsePart
+	enum State {
+		case none, head, body, end
+	}
 	
 	var method: HTTPMethod { return head?.method ?? .GET }
 	var uri: String { return head?.uri ?? "" }
 	var headers: HTTPHeaders { return head?.headers ?? .init() }
+	var uriVariables: [String:String] = [:]
+	var path: String = ""
+	var searchArgs: [(String, String)] = []
+	var contentLength = 0
+	var contentRead = 0
 	
-	public typealias InboundIn = HTTPServerRequestPart
-	public typealias OutboundOut = HTTPServerResponsePart
 	let finder: RouteFinder
 	var head: HTTPRequestHead?
 	var channel: Channel?
-	var pendingBytes: [ByteBuffer] = []
-	enum State {
-		case none, head, body, end
-	}
+	var pendingBytes = CircularBuffer<ByteBuffer>()
 	var readState = State.none
 	var writeState = State.none
 	
 	init(finder: RouteFinder) {
 		self.finder = finder
+	}
+	func readBody(_ call: @escaping (ByteBuffer?) -> ()) {
+		if pendingBytes.count > 0 {
+			call(pendingBytes.remove(at: 0))
+		} else {
+			// fix
+			call(nil)
+		}
 	}
 	func channelActive(ctx: ChannelHandlerContext) {
 		channel = ctx.channel
@@ -90,22 +127,32 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	func http(head: HTTPRequestHead, ctx: ChannelHandlerContext) {
 		readState = .head
 		self.head = head
-		let uri = head.uri
-		if let fnc = self.finder[uri] {
-			let state = HandlerState(request: self, uri: uri)
-			do {
-				self.flush(output: try fnc(state, self))
-			} catch {
-				let out = DefaultHTTPOutput()
-				out.status = .internalServerError
-				out.body = Array("Error caught: \(error)".utf8)
-				self.flush(output: out)
-			}
+		let (path, args) = head.uri.splitUri
+		self.path = path
+		searchArgs = args
+		let output: HTTPOutput
+		if let fnc = finder[path] {
+			let state = HandlerState(request: self, uri: path)
+			output = runHandler(state: state, fnc)
 		} else {
-			let out = DefaultHTTPOutput()
-			out.status = .notFound
-			out.body = Array("No route for URI.".utf8)
-			self.flush(output: out)
+			output = HTTPOutputError(status: .notFound, description: "No route for URI.")
+		}
+		flush(output: output)
+	}
+	func runHandler(state: HandlerState, _ fnc: (HandlerState, HTTPRequest) throws -> HTTPOutput) -> HTTPOutput {
+		do {
+			return try fnc(state, self)
+		} catch let error as TerminationType {
+			switch error {
+			case .error(let e):
+				return e
+			case .criteriaFailed:
+				return state.response
+			case .internalError:
+				return HTTPOutputError(status: .internalServerError)
+			}
+		} catch {
+			return HTTPOutputError(status: .internalServerError, description: "Error caught: \(error)")
 		}
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {
@@ -160,11 +207,15 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 					channel.close(promise: nil)
 				}
 			}
-			writeState = .none
-			readState = .none
-			head = nil
+			reset()
 			channel.writeAndFlush(wrapOutboundOut(.end(nil)), promise: p)
 		}
+	}
+	
+	func reset() {
+		writeState = .none
+		readState = .none
+		head = nil
 	}
 	
 //	func userInboundEventTriggered(ctx: ChannelHandlerContext, event: Any) {
@@ -217,7 +268,7 @@ class NIOBoundRoutes: BoundRoutes {
 		let finder = try RouteFinderDual(registry)
 		self.port = port
 		self.address = address
-		let bootstrap = ServerBootstrap(group: acceptGroup, childGroup: childGroup)
+		channel = try ServerBootstrap(group: acceptGroup, childGroup: childGroup)
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
 			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 72)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
@@ -231,8 +282,7 @@ class NIOBoundRoutes: BoundRoutes {
 				.then {
 					channel.pipeline.add(handler: NIOHTTPHandler(finder: finder))
 				}
-		}
-		channel = try bootstrap.bind(host: address, port: port).wait()
+			}.bind(host: address, port: port).wait()
 	}
 	public func listen() throws -> ListeningRoutes {
 		return NIOListeningRoutes(channel: channel)
