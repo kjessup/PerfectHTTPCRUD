@@ -12,6 +12,10 @@ extension String {
 	}
 	// need url decoding component generator
 	func appending(component name: String) -> String {
+		let name = name.components.joined(separator: "/")
+		if name.isEmpty {
+			return self
+		}
 		if hasSuffix("/") {
 			return self + name
 		}

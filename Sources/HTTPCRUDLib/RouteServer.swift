@@ -131,7 +131,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		self.path = path
 		searchArgs = args
 		let output: HTTPOutput
-		if let fnc = finder[path] {
+		if let fnc = finder[head.method, path] {
 			let state = HandlerState(request: self, uri: path)
 			output = runHandler(state: state, fnc)
 		} else {
@@ -258,7 +258,7 @@ func configureHTTPServerPipeline(pipeline: ChannelPipeline,
 
 class NIOBoundRoutes: BoundRoutes {
 	typealias RegistryType = RouteRegistry<HTTPRequest, HTTPOutput>
-	private let childGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+	private let childGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 	private let channel: Channel
 	
 	public let port: Int
@@ -310,3 +310,183 @@ public extension RouteRegistry where InType == HTTPRequest, OutType == HTTPOutpu
 	}
 }
 
+extension HTTPMethod {
+	static var allCases: [HTTPMethod] {
+		return [
+		.GET,.PUT,.ACL,.HEAD,.POST,.COPY,.LOCK,.MOVE,.BIND,.LINK,.PATCH,
+		.TRACE,.MKCOL,.MERGE,.PURGE,.NOTIFY,.SEARCH,.UNLOCK,.REBIND,.UNBIND,
+		.REPORT,.DELETE,.UNLINK,.CONNECT,.MSEARCH,.OPTIONS,.PROPFIND,.CHECKOUT,
+		.PROPPATCH,.SUBSCRIBE,.MKCALENDAR,.MKACTIVITY,.UNSUBSCRIBE
+		]
+	}
+	var name: String {
+		switch self {
+		case .GET:
+			return "GET"
+		case .PUT:
+			return "PUT"
+		case .ACL:
+			return "ACL"
+		case .HEAD:
+			return "HEAD"
+		case .POST:
+			return "POST"
+		case .COPY:
+			return "COPY"
+		case .LOCK:
+			return "LOCK"
+		case .MOVE:
+			return "MOVE"
+		case .BIND:
+			return "BIND"
+		case .LINK:
+			return "LINK"
+		case .PATCH:
+			return "PATCH"
+		case .TRACE:
+			return "TRACE"
+		case .MKCOL:
+			return "MKCOL"
+		case .MERGE:
+			return "MERGE"
+		case .PURGE:
+			return "PURGE"
+		case .NOTIFY:
+			return "NOTIFY"
+		case .SEARCH:
+			return "SEARCH"
+		case .UNLOCK:
+			return "UNLOCK"
+		case .REBIND:
+			return "REBIND"
+		case .UNBIND:
+			return "UNBIND"
+		case .REPORT:
+			return "REPORT"
+		case .DELETE:
+			return "DELETE"
+		case .UNLINK:
+			return "UNLINK"
+		case .CONNECT:
+			return "CONNECT"
+		case .MSEARCH:
+			return "MSEARCH"
+		case .OPTIONS:
+			return "OPTIONS"
+		case .PROPFIND:
+			return "PROPFIND"
+		case .CHECKOUT:
+			return "CHECKOUT"
+		case .PROPPATCH:
+			return "PROPPATCH"
+		case .SUBSCRIBE:
+			return "SUBSCRIBE"
+		case .MKCALENDAR:
+			return "MKCALENDAR"
+		case .MKACTIVITY:
+			return "MKACTIVITY"
+		case .UNSUBSCRIBE:
+			return "UNSUBSCRIBE"
+		case .RAW(let value):
+			return value
+		}
+	}
+}
+
+extension HTTPMethod: Hashable {
+	public var hashValue: Int { return name.hashValue }
+}
+
+extension String {
+	var method: HTTPMethod {
+		switch self {
+		case "GET":
+			return .GET
+		case "PUT":
+			return .PUT
+		case "ACL":
+			return .ACL
+		case "HEAD":
+			return .HEAD
+		case "POST":
+			return .POST
+		case "COPY":
+			return .COPY
+		case "LOCK":
+			return .LOCK
+		case "MOVE":
+			return .MOVE
+		case "BIND":
+			return .BIND
+		case "LINK":
+			return .LINK
+		case "PATCH":
+			return .PATCH
+		case "TRACE":
+			return .TRACE
+		case "MKCOL":
+			return .MKCOL
+		case "MERGE":
+			return .MERGE
+		case "PURGE":
+			return .PURGE
+		case "NOTIFY":
+			return .NOTIFY
+		case "SEARCH":
+			return .SEARCH
+		case "UNLOCK":
+			return .UNLOCK
+		case "REBIND":
+			return .REBIND
+		case "UNBIND":
+			return .UNBIND
+		case "REPORT":
+			return .REPORT
+		case "DELETE":
+			return .DELETE
+		case "UNLINK":
+			return .UNLINK
+		case "CONNECT":
+			return .CONNECT
+		case "MSEARCH":
+			return .MSEARCH
+		case "OPTIONS":
+			return .OPTIONS
+		case "PROPFIND":
+			return .PROPFIND
+		case "CHECKOUT":
+			return .CHECKOUT
+		case "PROPPATCH":
+			return .PROPPATCH
+		case "SUBSCRIBE":
+			return .SUBSCRIBE
+		case "MKCALENDAR":
+			return .MKCALENDAR
+		case "MKACTIVITY":
+			return .MKACTIVITY
+		case "UNSUBSCRIBE":
+			return .UNSUBSCRIBE
+		default:
+			return .RAW(value: self)
+		}
+	}
+	var splitMethod: (HTTPMethod?, String) {
+		if let i = range(of: "://") {
+			return (String(self[i]).method, String(self[i.upperBound...]))
+		}
+		return (nil, self)
+	}
+}
+
+public extension RouteRegistry {
+	func method(_ method: HTTPMethod, _ methods: HTTPMethod...) -> RouteRegistry {
+		let methods = [method] + methods
+		return .init(
+			routes.flatMap {
+				route in
+				methods.map {
+					.init(path: $0.name + "://" + route.path.splitMethod.1,
+						  resolve: route.resolve) } }
+		)
+	}
+}

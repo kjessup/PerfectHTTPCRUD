@@ -9,7 +9,7 @@ let big2048 = String(repeating: "A", count: 2048)
 let big4096 = String(repeating: "A", count: 4096)
 let big8192 = String(repeating: "A", count: 8192)
 
-let routes = root().dir{[
+let routes = root().method(.GET).dir{[
 	$0.empty { "" },
 	$0.path("1024") { big1024 },
 	$0.path("2048") { big2048 },
