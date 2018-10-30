@@ -6,6 +6,7 @@
 //
 
 import NIOHTTP1
+import NIO
 
 class DefaultHTTPOutput: HTTPOutput {
 	var status: HTTPResponseStatus? = .ok
@@ -20,30 +21,47 @@ class DefaultHTTPOutput: HTTPOutput {
 	}
 }
 
-class HandlerState {
-	var request: HTTPRequest
+final class HandlerState {
+	var request: NIOHTTPHandler
 	var response = DefaultHTTPOutput()
-	var currentComponent: String?
+	var currentComponent: String? {
+		guard range.lowerBound < uri.endIndex else {
+			return nil
+		}
+		return String(uri[range])
+	}
 	let uri: [Character]
-	var genRange: Array<Character>.Index
-	init(request: HTTPRequest, uri: String) {
+	var range: Range<Array<Character>.Index>
+	var content: HTTPRequestContentType?
+	init(request: NIOHTTPHandler, uri: String) {
 		self.request = request
 		self.uri = Array(uri)
-		genRange = self.uri.startIndex
+		let si = self.uri.startIndex
+		range = si..<(si+1)
 		advanceComponent()
 	}
+	func readContent() -> EventLoopFuture<HTTPRequestContentType> {
+		if let c = content {
+			return request.channel!.eventLoop.newSucceededFuture(result: c)
+		}
+		return request.readContent().map {
+			self.content = $0
+			return $0
+		}
+	}
 	func advanceComponent() {
+		var genRange = range.endIndex
 		while genRange < uri.endIndex && uri[genRange] == "/" {
 			genRange = uri.index(after: genRange)
 		}
 		guard genRange < uri.endIndex else {
-			currentComponent = nil
+			range = uri.endIndex..<uri.endIndex
 			return
 		}
-		let sRange = genRange
+		let lowerBound = genRange
 		while genRange < uri.endIndex && uri[genRange] != "/" {
 			genRange = uri.index(after: genRange)
 		}
-		currentComponent = String(uri[sRange..<genRange])
+		range = lowerBound..<genRange
 	}
 }
