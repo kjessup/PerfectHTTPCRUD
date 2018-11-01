@@ -73,7 +73,7 @@ class RouteFinderRegExp: RouteFinder {
 			case "**":
 				return "/(.*)"
 			default:
-				return "/\(comp)"
+				return "/" + comp
 			}
 		}
 		return try NSRegularExpression(pattern: "^" + strs.joined(separator: "") + "$", options: NSRegularExpression.Options.caseInsensitive)
@@ -88,7 +88,7 @@ class RouteFinderDictionary: RouteFinder {
 		}, uniquingKeysWith: {return $1})
 	}
 	subscript(_ method: HTTPMethod, _ uri: String) -> ResolveFunc? {
-		let key = "\(method.name)://\(uri)"
+		let key = method.name + "://" + uri
 		return dict[key]
 	}
 }

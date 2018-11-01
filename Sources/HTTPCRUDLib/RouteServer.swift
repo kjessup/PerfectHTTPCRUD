@@ -121,7 +121,7 @@ func configureHTTPServerPipeline(pipeline: ChannelPipeline,
 
 class NIOBoundRoutes: BoundRoutes {
 	typealias RegistryType = Routes<HTTPRequest, HTTPOutput>
-	private let childGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)//System.coreCount)
+	private let childGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 	private let channel: Channel
 	public let port: Int
 	public let address: String

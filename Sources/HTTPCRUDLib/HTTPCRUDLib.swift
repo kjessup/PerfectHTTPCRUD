@@ -37,14 +37,33 @@ extension String {
 		return self
 	}
 	var splitQuery: (String, String?) {
-		let splt = split(separator: "?").map(String.init)
-		return (splt.first ?? "/", splt.count > 1 ? splt[1] : nil)
+		guard let r = self.range(of: "?") else {
+			return (self, nil)
+		}
+		return (String(self[self.startIndex..<r.lowerBound]), String(self[r.upperBound...]))
 	}
 	var decodedQuery: [(String, String)] {
-		return split(separator: "&").map {
-			let s = $0.split(separator: "=").map(String.init)
-			return ((s.first ?? "").stringByDecodingURL ?? "",  (s.count > 1 ? s[1] : "").stringByDecodingURL ?? "")
+		var ret: [(String, String)] = []
+		let ampChar = CharacterSet(charactersIn: "&")
+		let eqChar = CharacterSet(charactersIn: "=")
+		var pos: String.Index = startIndex
+		let end = endIndex
+		
+		func makeTuple(_ range: Range<String.Index>) -> (String, String) {
+			guard let r = self.rangeOfCharacter(from: eqChar, range: range) else {
+				return (String(self[range]), "")
+			}
+			return (String(self[range.lowerBound..<r.lowerBound]).stringByDecodingURL ?? "",
+					String(self[r.upperBound..<range.upperBound]).stringByDecodingURL ?? "")
 		}
+		while let amp = rangeOfCharacter(from: ampChar, range: pos..<end) {
+			ret.append(makeTuple(pos..<amp.lowerBound))
+			pos = amp.upperBound
+		}
+		if pos < end {
+			ret.append(makeTuple(pos..<end))
+		}
+		return ret
 	}
 	var splitUri: (String, [(String, String)]) {
 		let s1 = splitQuery
