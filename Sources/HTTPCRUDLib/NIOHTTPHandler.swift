@@ -58,7 +58,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		pendingPromise = promise
 		channel?.read()
 	}
-	
+	// content can only be read once
 	func readContent() -> EventLoopFuture<HTTPRequestContentType> {
 		if contentLength == 0 || contentConsumed == contentLength {
 			return channel!.eventLoop.newSucceededFuture(result: .none)
@@ -104,9 +104,14 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	func readContent(accum: [UInt8], _ promise: EventLoopPromise<[UInt8]>) {
 		readSomeContent().whenSuccess {
 			buffers in
-			var a = accum
-			buffers.forEach {
-				a.append(contentsOf: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+			var a: [UInt8]
+			if buffers.count == 1 && accum.isEmpty {
+				a = buffers.first!.getBytes(at: 0, length: buffers.first!.readableBytes) ?? []
+			} else {
+				a = accum
+				buffers.forEach {
+					a.append(contentsOf: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+				}
 			}
 			if self.contentConsumed == self.contentLength {
 				promise.succeed(result: a)
@@ -139,29 +144,32 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		contentType = head.headers["content-type"].first
 		contentLength = Int(head.headers["content-length"].first ?? "0") ?? 0
 		contentRead = 0
-		let output: HTTPOutput
-		if let fnc = finder[head.method, path] {
-			let state = HandlerState(request: self, uri: path)
-			output = runHandler(state: state, fnc)
-		} else {
-			output = HTTPOutputError(status: .notFound, description: "No route for URI.")
+		guard let fnc = finder[head.method, path] else {
+			return flush(output: HTTPOutputError(status: .notFound, description: "No route for URI."))
 		}
-		flush(output: output)
-	}
-	func runHandler(state: HandlerState, _ fnc: (HandlerState, HTTPRequest) throws -> HTTPOutput) -> HTTPOutput {
-		do {
-			return try fnc(state, self)
-		} catch let error as TerminationType {
+		let state = HandlerState(request: self, uri: path)
+		let f = channel!.eventLoop.newSucceededFuture(result: RouteValueBox(state, self as HTTPRequest))
+		let p = try! fnc(f)
+		p.whenSuccess {
+			self.flush(output: $0.value)
+		}
+		p.whenFailure {
+			error in
+			let output: HTTPOutput
 			switch error {
-			case .error(let e):
-				return e
-			case .criteriaFailed:
-				return state.response
-			case .internalError:
-				return HTTPOutputError(status: .internalServerError)
+			case let error as TerminationType:
+				switch error {
+				case .error(let e):
+					output = e
+				case .criteriaFailed:
+					output = state.response
+				case .internalError:
+					output = HTTPOutputError(status: .internalServerError)
+				}
+			default:
+				output = HTTPOutputError(status: .internalServerError, description: "Error caught: \(error)")
 			}
-		} catch {
-			return HTTPOutputError(status: .internalServerError, description: "Error caught: \(error)")
+			self.flush(output: output)
 		}
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {

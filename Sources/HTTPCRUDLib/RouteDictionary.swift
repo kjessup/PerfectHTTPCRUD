@@ -12,20 +12,20 @@ import NIOConcurrencyHelpers
 import NIOHTTP1
 
 protocol RouteFinder {
-	typealias ResolveFunc = (HandlerState, HTTPRequest) throws -> HTTPOutput
-	init(_ registry: RouteRegistry<HTTPRequest, HTTPOutput>) throws
+	typealias ResolveFunc = (Future<RouteValueBox<HTTPRequest>>) throws -> Future<RouteValueBox<HTTPOutput>>
+	init(_ registry: Routes<HTTPRequest, HTTPOutput>) throws
 	subscript(_ method: HTTPMethod, _ uri: String) -> ResolveFunc? { get }
 }
 
 extension RouteRegistry {
 	var withMethods: RouteRegistry {
-		return .init(routes.flatMap {
-			item -> [RouteRegistry.RouteItem] in
-			let (method, path) = item.path.splitMethod
+		return .init(routes: routes.flatMap {
+			item -> [RouteRegistry.Tuple] in
+			let (method, path) = item.0.splitMethod
 			if nil == method {
-				let r = item.resolve
+				let r = item.1
 				return HTTPMethod.allCases.map {
-					RouteRegistry.RouteItem(path: "\($0)://\(path)", resolve: r)
+					("\($0)://\(path)", r)
 				}
 			}
 			return [item]
@@ -36,14 +36,14 @@ extension RouteRegistry {
 class RouteFinderRegExp: RouteFinder {
 	typealias Matcher = (NSRegularExpression, ResolveFunc)
 	let matchers: [HTTPMethod:[Matcher]]
-	required init(_ registry: RouteRegistry<HTTPRequest, HTTPOutput>) throws {
-		let full = registry.withMethods.routes
+	required init(_ registry: Routes<HTTPRequest, HTTPOutput>) throws {
+		let full = registry.registry.withMethods.routes
 		var m = [HTTPMethod:[Matcher]]()
 		try full.forEach {
-			route in
-			let (meth, path) = route.path.splitMethod
+			let (p1, fnc) = $0
+			let (meth, path) = p1.splitMethod
 			let method = meth ?? .GET
-			let matcher: Matcher = (try RouteFinderRegExp.regExp(for: path), route.resolve)
+			let matcher: Matcher = (try RouteFinderRegExp.regExp(for: path), fnc)
 			let fnd = m[method] ?? []
 			m[method] = fnd + [matcher]
 		}
@@ -82,11 +82,9 @@ class RouteFinderRegExp: RouteFinder {
 
 class RouteFinderDictionary: RouteFinder {
 	let dict: [String:ResolveFunc]
-	required init(_ registry: RouteRegistry<HTTPRequest, HTTPOutput>) throws {
-		dict = Dictionary(registry.withMethods.routes.filter {
-			!($0.path.components.contains("*") || $0.path.components.contains("**"))
-		}.map {
-			($0.path, $0.resolve)
+	required init(_ registry: Routes<HTTPRequest, HTTPOutput>) throws {
+		dict = Dictionary(registry.registry.withMethods.routes.filter {
+			!($0.0.components.contains("*") || $0.0.components.contains("**"))
 		}, uniquingKeysWith: {return $1})
 	}
 	subscript(_ method: HTTPMethod, _ uri: String) -> ResolveFunc? {
@@ -98,7 +96,7 @@ class RouteFinderDictionary: RouteFinder {
 class RouteFinderDual: RouteFinder {
 	let alpha: RouteFinder
 	let beta: RouteFinder
-	required init(_ registry: RouteRegistry<HTTPRequest, HTTPOutput>) throws {
+	required init(_ registry: Routes<HTTPRequest, HTTPOutput>) throws {
 		alpha = try RouteFinderDictionary(registry)
 		beta = try RouteFinderRegExp(registry)
 	}

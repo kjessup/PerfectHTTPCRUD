@@ -6,6 +6,7 @@
 //
 
 import PerfectHTTP
+import NIO
 
 public enum RouteError: Error, CustomStringConvertible {
 	case duplicatedRoutes([String])
@@ -18,28 +19,44 @@ public enum RouteError: Error, CustomStringConvertible {
 	}
 }
 
-@dynamicMemberLookup
-public struct RouteRegistry<InType, OutType> {
-	typealias ResolveFunc = (HandlerState, InType) throws -> OutType
-	struct RouteItem {
-		let path: String
-		let resolve: ResolveFunc
+//@dynamicMemberLookup
+struct RouteRegistry<InType, OutType>: CustomStringConvertible {
+	typealias ResolveFunc = (InType) throws -> OutType
+	typealias Tuple = (String,ResolveFunc)
+	let routes: [String:ResolveFunc]
+	public var description: String {
+		return routes.keys.sorted().joined(separator: "\n")
 	}
-	let routes: [RouteItem]
-	init(_ routes: [RouteItem]) {
+	init(_ routes: [String:ResolveFunc]) {
 		self.routes = routes
 	}
-	func then<NewOut>(_ call: @escaping (HandlerState, OutType) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		return .init(routes.map {
-			item in
-			.init(path: item.path, resolve: {
-				(state: HandlerState, t: InType) throws -> NewOut in
-				return try call(state, item.resolve(state, t))
-			})
-		})
+	init(routes: [Tuple]) {
+		self.init(Dictionary(uniqueKeysWithValues: routes))
+	}
+	func then<NewOut>(_ call: @escaping (OutType) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
+		return .init(routes: routes.map { let (p, f) = $0; return (p, {try call(f($0))}) })
+	}
+	func append<NewOut>(_ registry: RouteRegistry<OutType, NewOut>) -> RouteRegistry<InType, NewOut> {
+		let a = routes.flatMap {
+			(t: Tuple) -> [RouteRegistry<InType, NewOut>.Tuple] in
+			let (itemPath, itemFnc) = t
+			return registry.routes.map {
+				(t: RouteRegistry<OutType, NewOut>.Tuple) -> RouteRegistry<InType, NewOut>.Tuple in
+				let (subPath, subFnc) = t
+				let (meth, path) = subPath.splitMethod
+				let newPath = nil == meth ?
+					itemPath.appending(component: path) :
+					meth!.name + "://" + itemPath.splitMethod.1.appending(component: path)
+				return (newPath, { try subFnc(itemFnc($0)) })
+			}
+		}
+		return .init(routes: a)
+	}
+	func combine(_ registries: [RouteRegistry<InType, OutType>]) -> RouteRegistry<InType, OutType> {
+		return .init(routes: routes + registries.flatMap { $0.routes })
 	}
 	func validate() throws {
-		let paths = routes.map { $0.path }.sorted()
+		let paths = routes.map { $0.0 }.sorted()
 		var dups = Set<String>()
 		var last: String?
 		paths.forEach {
@@ -55,241 +72,239 @@ public struct RouteRegistry<InType, OutType> {
 	}
 }
 
-extension RouteRegistry: CustomStringConvertible {
-	public var description: String {
-		return routes.map { $0.path }.sorted().joined(separator: "\n")
+struct RouteValueBox<ValueType> {
+	let state: HandlerState
+	let value: ValueType
+	init(_ state: HandlerState, _ value: ValueType) {
+		self.state = state
+		self.value = value
 	}
 }
 
-public extension RouteRegistry {
-	func path(_ name: String) -> RouteRegistry {
-		return .init(
-			routes.map {
-				item in
-				return RouteItem(path: item.path.appending(component: name),
-								 resolve: {
-										state, i throws -> OutType in
-										defer { state.advanceComponent() }
-										return try item.resolve(state, i)
-				})
+typealias Future = EventLoopFuture
+
+@dynamicMemberLookup
+public struct Routes<InType, OutType> {
+	typealias Registry = RouteRegistry<Future<RouteValueBox<InType>>, Future<RouteValueBox<OutType>>>
+	let registry: Registry
+	init(_ registry: Registry) {
+		self.registry = registry
+	}
+	func applyPaths(_ call: (String) -> String) -> Routes {
+		return .init(.init(routes: registry.routes.map { (call($0.key), $0.value) }))
+	}
+	func applyFuncs<NewOut>(_ call: @escaping (Future<RouteValueBox<OutType>>) -> Future<RouteValueBox<NewOut>>) -> Routes<InType, NewOut> {
+		return .init(.init(routes: registry.routes.map {
+			let (path, fnc) = $0
+			return (path, { call(try fnc($0)) })
+		}))
+	}
+	func apply<NewOut>(paths: (String) -> String, funcs call: @escaping (Future<RouteValueBox<OutType>>) -> Future<RouteValueBox<NewOut>>) -> Routes<InType, NewOut> {
+		return .init(.init(routes: registry.routes.map {
+			let (path, fnc) = $0
+			return (paths(path), { call(try fnc($0)) })
+		}))
+	}
+}
+
+public func root() -> Routes<HTTPRequest, HTTPRequest> {
+	return .init(.init(["/":{$0}]))
+}
+
+public func root<NewOut>(_ call: @escaping (HTTPRequest) throws -> NewOut) -> Routes<HTTPRequest, NewOut> {
+	return .init(.init(["/":{$0.thenThrowing{RouteValueBox($0.state, try call($0.value))}}]))
+}
+
+public func root<NewOut>(path: String = "/", _ type: NewOut.Type) -> Routes<NewOut, NewOut> {
+	return .init(.init([path:{$0}]))
+}
+
+public extension Routes {
+	func then<NewOut>(_ call: @escaping (OutType) throws -> NewOut) -> Routes<InType, NewOut> {
+		return applyFuncs {
+			return $0.thenThrowing {
+				return RouteValueBox($0.state, try call($0.value))
 			}
-		)
+		}
 	}
-	func path<NewOut>(_ name: String, _ call: @escaping (OutType) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		typealias RetType = RouteRegistry<InType, NewOut>
-		return .init(
-			routes.map {
-				item in
-				return RetType.RouteItem(path: item.path.appending(component: name),
-										 resolve: {
-											state, i throws -> NewOut in
-											defer { state.advanceComponent() }
-											return try call(item.resolve(state, i))
-				})
+	func then<NewOut>(_ call: @escaping () throws -> NewOut) -> Routes<InType, NewOut> {
+		return applyFuncs {
+			return $0.thenThrowing {
+				return RouteValueBox($0.state, try call())
 			}
-		)
+		}
 	}
-	func path<NewOut>(_ name: String, _ call: @escaping () throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		return path(name, {_ in return try call()})
-	}
-	
-	func ext(_ ext: String) -> RouteRegistry {
-		let ext = ext.ext
-		return .init(
-			routes.map {
-				item in
-				return RouteItem(path: item.path + ext,
-								 resolve: item.resolve)
-			}
-		)
-	}
-	func ext<NewOut>(_ ext: String,
-					 contentType: String? = nil,
-					 _ call: @escaping (OutType) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		let ext = ext.ext
-		typealias RetType = RouteRegistry<InType, NewOut>
-		return .init(
-			routes.map {
-				item in
-				return RetType.RouteItem(path: item.path + ext,
-										 resolve: {
-											state, i throws -> NewOut in
-											let o = try call(item.resolve(state, i))
-											if let ct = contentType, !ct.isEmpty {
-												state.response.headers?.replaceOrAdd(name: "content-type", value: ct)
-											}
-											return o
-				})
-			}
-		)
-	}
-	
-	func wild<NewOut>(_ call: @escaping (OutType, String) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		typealias RetType = RouteRegistry<InType, NewOut>
-		return .init(
-			routes.map {
-				item in
-				return RetType.RouteItem(path: item.path.appending(component: "*"),
-										 resolve: {
-											state, i throws -> NewOut in
-											let o = try item.resolve(state, i)
-											let component = state.currentComponent ?? "-error-"
-											state.advanceComponent()
-											return try call(o, component)
-				})
-			}
-		)
-	}
-	func wild(name: String) -> RouteRegistry {
-		typealias RetType = RouteRegistry<InType, OutType>
-		return .init(
-			routes.map {
-				item in
-				return RetType.RouteItem(path: item.path.appending(component: "*"),
-										 resolve: {
-											state, i throws -> OutType in
-											let o = try item.resolve(state, i)
-											state.request.uriVariables[name] = state.currentComponent ?? "-error-"
-											state.advanceComponent()
-											return o
-				})
-			}
-		)
-	}
-	func trailing<NewOut>(_ call: @escaping (OutType, String) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		typealias RetType = RouteRegistry<InType, NewOut>
-		return .init(
-			routes.map {
-				item in
-				return RetType.RouteItem(path: item.path.appending(component: "**"),
-										 resolve: {
-											state, i throws -> NewOut in
-											let o = try item.resolve(state, i)
-											let component = state.currentComponent ?? "-error-"
-											state.advanceComponent()
-											return try call(o, component)
-				})
-			}
-		)
-	}
-	subscript(dynamicMember name: String) -> RouteRegistry {
+}
+
+public extension Routes {
+	subscript(dynamicMember name: String) -> Routes {
 		return path(name)
 	}
-	subscript<NewOut>(dynamicMember name: String) -> (@escaping (OutType) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		typealias RegType = RouteRegistry<OutType, NewOut>
+	subscript<NewOut>(dynamicMember name: String) -> (@escaping (OutType) throws -> NewOut) -> Routes<InType, NewOut> {
 		return {self.path(name, $0)}
 	}
-	subscript<NewOut>(dynamicMember name: String) -> (@escaping () throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		typealias RegType = RouteRegistry<OutType, NewOut>
+	subscript<NewOut>(dynamicMember name: String) -> (@escaping () throws -> NewOut) -> Routes<InType, NewOut> {
 		return { call in self.path(name, { _ in return try call()})}
 	}
 }
 
-public extension RouteRegistry {
-	func dir<NewOut>(_ call: (RouteRegistry<OutType, OutType>) -> [RouteRegistry<OutType, NewOut>])  -> RouteRegistry<InType, NewOut> {
-		let root = RouteRegistry<OutType, OutType>([.init(path: "/", resolve: {$1})])
-		return append(call(root))
-	}
-	// !FIX! decide between dir vs. append
-	func dir<NewOut>(_ registries: [RouteRegistry<OutType, NewOut>]) -> RouteRegistry<InType, NewOut> {
-		return .init(registries.flatMap { self.append($0).routes })
-	}
-	func dir<NewOut>(_ registry: RouteRegistry<OutType, NewOut>, _ registries: RouteRegistry<OutType, NewOut>...) -> RouteRegistry<InType, NewOut> {
-		return .init(append(registry).routes + registries.flatMap { self.append($0).routes })
-	}
-	func append<NewOut>(_ registry: RouteRegistry<OutType, NewOut>) -> RouteRegistry<InType, NewOut> {
-		return .init(routes.flatMap {
-			item in
-			return registry.routes.map {
-				subItem in
-				return .init(path: item.path.appending(component: subItem.path),
-							 resolve: {
-								state, t throws -> NewOut in
-								return try subItem.resolve(state, item.resolve(state, t))
-				})
+public extension Routes {
+	func path(_ name: String) -> Routes {
+		return apply(
+			paths: {$0.appending(component: name)},
+			funcs: {
+				$0.thenThrowing {
+					$0.state.advanceComponent()
+					return $0
+				}
 			}
-		})
+		)
 	}
-	func append<NewOut>(_ registries: [RouteRegistry<OutType, NewOut>]) -> RouteRegistry<InType, NewOut> {
-		return .init(registries.flatMap { self.append($0).routes })
+	func path<NewOut>(_ name: String, _ call: @escaping (OutType) throws -> NewOut) -> Routes<InType, NewOut> {
+		return apply(
+			paths: {$0.appending(component: name)},
+			funcs: {
+				$0.thenThrowing {
+					$0.state.advanceComponent()
+					return RouteValueBox($0.state, try call($0.value))
+				}
+			}
+		)
 	}
-	func combine(_ registry: RouteRegistry<InType, OutType>) -> RouteRegistry<InType, OutType> {
-		return .init(routes + registry.routes)
+	func path<NewOut>(_ name: String, _ call: @escaping () throws -> NewOut) -> Routes<InType, NewOut> {
+		return apply(
+			paths: {$0.appending(component: name)},
+			funcs: {
+				$0.thenThrowing {
+					$0.state.advanceComponent()
+					return RouteValueBox($0.state, try call())
+				}
+			}
+		)
 	}
-	func combine(_ registries: [RouteRegistry<InType, OutType>]) -> RouteRegistry<InType, OutType> {
-		return .init(routes + registries.flatMap { $0.routes })
+}
+
+public extension Routes {
+	func ext(_ ext: String) -> Routes {
+		let ext = ext.ext
+		return applyPaths { $0 + ext }
 	}
-	func then<NewOut>(_ call: @escaping (OutType) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		return then {try call($1)}
+	func ext<NewOut>(_ ext: String,
+					  contentType: String? = nil,
+					  _ call: @escaping (OutType) throws -> NewOut) -> Routes<InType, NewOut> {
+		let ext = ext.ext
+		return apply(
+			paths: {$0 + ext},
+			funcs: {
+				$0.thenThrowing {
+					return RouteValueBox($0.state, try call($0.value))
+				}
+			}
+		)
 	}
-	func then<NewOut>(_ call: @escaping () throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		return then {_ in return try call()}
+}
+
+public extension Routes {
+	func wild<NewOut>(_ call: @escaping (OutType, String) throws -> NewOut) -> Routes<InType, NewOut> {
+		return apply(
+			paths: {$0.appending(component: "*")},
+			funcs: {
+				$0.thenThrowing {
+					let c = $0.state.currentComponent ?? "-error-"
+					$0.state.advanceComponent()
+					return RouteValueBox($0.state, try call($0.value, c))
+				}
+			}
+		)
 	}
-	func request<NewOut>(_ call: @escaping (OutType, HTTPRequest) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		return then {try call($1, $0.request)}
+	func wild(name: String) -> Routes {
+		return apply(
+			paths: {$0.appending(component: "*")},
+			funcs: {
+				$0.thenThrowing {
+					$0.state.request.uriVariables[name] = $0.state.currentComponent ?? "-error-"
+					$0.state.advanceComponent()
+					return $0
+				}
+			}
+		)
 	}
-	func statusCheck(_ handler: @escaping (OutType) throws -> HTTPResponseStatus) -> RouteRegistry<InType, OutType> {
+	func trailing<NewOut>(_ call: @escaping (OutType, String) throws -> NewOut) -> Routes<InType, NewOut> {
+		return apply(
+			paths: {$0.appending(component: "**")},
+			funcs: {
+				$0.thenThrowing {
+					let c = $0.state.trailingComponents ?? "-error-"
+					$0.state.advanceComponent()
+					return RouteValueBox($0.state, try call($0.value, c))
+				}
+			}
+		)
+	}
+}
+
+public extension Routes {
+	func request<NewOut>(_ call: @escaping (OutType, HTTPRequest) throws -> NewOut) -> Routes<InType, NewOut> {
+		return applyFuncs {
+			$0.thenThrowing {
+				return RouteValueBox($0.state, try call($0.value, $0.state.request))
+			}
+		}
+	}
+	func readBody<NewOut>(_ call: @escaping (OutType, HTTPRequestContentType) throws -> NewOut) -> Routes<InType, NewOut> {
+		return applyFuncs {
+			$0.then {
+				box in
+				return box.state.request.readContent().thenThrowing {
+					return RouteValueBox(box.state, try call(box.value, $0))
+				}
+			}
+		}
+	}
+	func statusCheck(_ handler: @escaping (OutType) throws -> HTTPResponseStatus) -> Routes<InType, OutType> {
 		return then {
-			state, i in
-			switch try handler(i).code {
+			switch try handler($0).code {
 			case 200..<300:
-				return i
+				return $0
 			default:
 				throw TerminationType.criteriaFailed
 			}
 		}
 	}
 	func decode<Type: Decodable, NewOut>(_ type: Type.Type,
-										 _ handler: @escaping (OutType, Type) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-		return then {
-			state, i in
-			return try handler(i, try state.request.decode(Type.self))
+										 _ handler: @escaping (OutType, Type) throws -> NewOut) -> Routes<InType, NewOut> {
+		return readBody { a, _ in return a }.request {
+			return try handler($0, try $1.decode(Type.self))
 		}
 	}
-	func decode<Type: Decodable>(_ type: Type.Type) -> RouteRegistry<InType, Type> {
-		return then {
-			state, i in
-			return try state.request.decode(Type.self)
-		}
-	}
-}
-
-public extension RouteRegistry where OutType: Encodable {
-	func json() -> RouteRegistry<InType, HTTPOutput> {
-		return then {
-			state, i in
-			return try JSONOutput(i)
+	func decode<Type: Decodable>(_ type: Type.Type) -> Routes<InType, Type> {
+		return readBody { a, _ in return a }.request {
+			return try $1.decode(Type.self)
 		}
 	}
 }
 
-public extension RouteRegistry where OutType: CustomStringConvertible {
-	func text() -> RouteRegistry<InType, HTTPOutput> {
-		return then {
-			state, i in
-			return TextOutput(i)
-		}
+public extension Routes {
+	func dir<NewOut>(_ call: (Routes<OutType, OutType>) -> [Routes<OutType, NewOut>]) -> Routes<InType, NewOut> {
+		return dir(call(root(OutType.self)))
+	}
+	func dir<NewOut>(_ registries: [Routes<OutType, NewOut>]) -> Routes<InType, NewOut> {
+		let reg = RouteRegistry(routes: registries.flatMap { $0.registry.routes })
+		return .init(registry.append(reg))
+	}
+	func dir<NewOut>(_ registry: Routes<OutType, NewOut>, _ registries: Routes<OutType, NewOut>...) -> Routes<InType, NewOut> {
+		return dir([registry] + registries)
 	}
 }
 
-public func root(path: String = "/") -> RouteRegistry<HTTPRequest, HTTPRequest> {
-	return .init([
-		.init(path: path, resolve: {
-			(_, t: HTTPRequest) throws -> HTTPRequest in
-			return t
-		})
-	])
+public extension Routes where OutType: Encodable {
+	func json() -> Routes<InType, HTTPOutput> {
+		return then { try JSONOutput($0) }
+	}
 }
 
-public func root<NewOut>(path: String = "/", _ call: @escaping (HTTPRequest) throws -> NewOut) -> RouteRegistry<HTTPRequest, NewOut> {
-	return .init([
-		.init(path: path, resolve: {
-			(_, t: HTTPRequest) throws -> NewOut in
-			return try call(t)
-		})
-	])
-}
-
-public func root<NewOut>(path: String = "/", _ type: NewOut.Type) -> RouteRegistry<NewOut, NewOut> {
-	return .init([.init(path: "/", resolve: {$1})])
+public extension Routes where OutType: CustomStringConvertible {
+	func text() -> Routes<InType, HTTPOutput> {
+		return then { TextOutput($0) }
+	}
 }

@@ -10,6 +10,10 @@ import NIOHTTP1
 import Dispatch
 import Foundation
 
+/* TODO
+struct requestinfoforlogging {
+}
+*/
 public enum HTTPRequestContentType {
 	case none,
 		multiPartForm(MimeReader),
@@ -116,8 +120,8 @@ func configureHTTPServerPipeline(pipeline: ChannelPipeline,
 }
 
 class NIOBoundRoutes: BoundRoutes {
-	typealias RegistryType = RouteRegistry<HTTPRequest, HTTPOutput>
-	private let childGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+	typealias RegistryType = Routes<HTTPRequest, HTTPOutput>
+	private let childGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)//System.coreCount)
 	private let channel: Channel
 	public let port: Int
 	public let address: String
@@ -138,7 +142,7 @@ class NIOBoundRoutes: BoundRoutes {
 				channel in
 				configureHTTPServerPipeline(pipeline: channel.pipeline)
 				.then {
-					channel.pipeline.add(handler: BackPressureHandler())// NIOHTTPHandler(finder: finder))
+					channel.pipeline.add(handler: NIOHTTPHandler(finder: finder))
 				}
 			}.bind(host: address, port: port).wait()
 	}
@@ -162,7 +166,7 @@ class NIOListeningRoutes: ListeningRoutes {
 	}
 }
 
-public extension RouteRegistry where InType == HTTPRequest, OutType == HTTPOutput {
+public extension Routes where InType == HTTPRequest, OutType == HTTPOutput {
 	func bind(port: Int, address: String = "0.0.0.0") throws -> BoundRoutes {
 		return try NIOBoundRoutes(registry: self, port: port, address: address)
 	}
@@ -330,21 +334,27 @@ extension String {
 	}
 	var splitMethod: (HTTPMethod?, String) {
 		if let i = range(of: "://") {
-			return (String(self[i]).method, String(self[i.upperBound...]))
+			return (String(self[self.startIndex..<i.lowerBound]).method, String(self[i.upperBound...]))
 		}
 		return (nil, self)
 	}
 }
 
-public extension RouteRegistry {
-	func method(_ method: HTTPMethod, _ methods: HTTPMethod...) -> RouteRegistry {
+public extension Routes {
+	var GET: Routes { return method(.GET) }
+	var POST: Routes { return method(.POST) }
+	var PUT: Routes { return method(.PUT) }
+	var DELETE: Routes { return method(.DELETE) }
+	var OPTIONS: Routes { return method(.OPTIONS) }
+	func method(_ method: HTTPMethod, _ methods: HTTPMethod...) -> Routes {
 		let methods = [method] + methods
-		return .init(
-			routes.flatMap {
+		return .init(.init(routes:
+			registry.routes.flatMap {
 				route in
-				methods.map {
-					.init(path: $0.name + "://" + route.path.splitMethod.1,
-						  resolve: route.resolve) } }
-		)
+				return methods.map {
+					($0.name + "://" + route.0.splitMethod.1, route.1)
+				}
+			}
+		))
 	}
 }

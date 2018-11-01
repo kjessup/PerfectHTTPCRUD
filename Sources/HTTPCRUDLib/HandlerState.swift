@@ -30,6 +30,12 @@ final class HandlerState {
 		}
 		return String(uri[range])
 	}
+	var trailingComponents: String? {
+		guard range.lowerBound < uri.endIndex else {
+			return nil
+		}
+		return String(uri[range.lowerBound...])
+	}
 	let uri: [Character]
 	var range: Range<Array<Character>.Index>
 	var content: HTTPRequestContentType?

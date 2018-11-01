@@ -8,6 +8,4 @@
 import Foundation
 import PerfectCRUD
 
-public extension RouteRegistry {
-	
-}
+

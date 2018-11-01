@@ -5,30 +5,38 @@ import PerfectSQLite
 import PerfectCRUD
 @testable import HTTPCRUDLib
 
-class ShimHTTPRequest: HTTPRequest {
-	var path = ""
-	var searchArgs: [(String, String)] = []
-	var contentLength: Int = 0
-	var contentRead: Int = 0
-	var uriVariables: [String : String] = [:]
-	var method = HTTPMethod.GET
-	var uri = "" {
-		didSet {
-			let (p, a) = uri.splitUri
-			path = p
-			searchArgs = a
-		}
-	}
-	var headers = HTTPHeaders()
-	func readBody(_ call: @escaping (ByteBuffer?) -> ()) {
-		call(nil)
-	}
-	
-	func run(finder: RouteFinder) throws -> HTTPOutput? {
-		let state = HandlerState(request: self, uri: path)
-		return try finder[path]?(state, self)
-	}
-}
+//class ShimHTTPRequest: HTTPRequest {
+//	var contentType: String?
+//	
+//	var contentConsumed: Int
+//	
+//	func readSomeContent() -> EventLoopFuture<[ByteBuffer]> {
+//		
+//	}
+//	
+//	func readContent() -> EventLoopFuture<HTTPRequestContentType> {
+//		
+//	}
+//	
+//	var path = ""
+//	var searchArgs: [(String, String)] = []
+//	var contentLength: Int = 0
+//	var contentRead: Int = 0
+//	var uriVariables: [String : String] = [:]
+//	var method = HTTPMethod.GET
+//	var uri = "" {
+//		didSet {
+//			let (p, a) = uri.splitUri
+//			path = p
+//			searchArgs = a
+//		}
+//	}
+//	var headers = HTTPHeaders()
+//	func readBody(_ call: @escaping (ByteBuffer?) -> ()) {
+//		call(nil)
+//	}
+//	
+//}
 
 final class HTTPCRUDLibTests: XCTestCase {
     func testScratch() {
@@ -91,14 +99,14 @@ final class HTTPCRUDLibTests: XCTestCase {
 			.v1.dir(deviceRoutes.json(),
 					groupRoutes.json())
 		
-		let request = ShimHTTPRequest()
-		request.uri = "/v1/device/share/token?id=\(UUID().uuidString)"
-		let uri = request.path
+//		let request = ShimHTTPRequest()
+//		request.uri = "/v1/device/share/token?id=\(UUID().uuidString)"
+		let uri = "/v1/device/share/token"//request.path
 		let finder = try! RouteFinderDual(v1)
-		if let fnd = finder[uri] {
-			let state = HandlerState(request: request, uri: uri)
-			let output = try! fnd(state, request)
-			print(String(validatingUTF8: output.body ?? [])!)
+		if let fnd = finder[.GET, uri] {
+//			let state = HandlerState(request: request, uri: uri)
+//			let output = try! fnd(state, request)
+//			print(String(validatingUTF8: output.body ?? [])!)
 		}
 	}
 	
@@ -133,19 +141,19 @@ final class HTTPCRUDLibTests: XCTestCase {
 
 		let fullRoutes = root()
 			.v1
-			.append([
+			.dir(
 				user.info { UserResponse(id: $0.1.id, msg: "i") },
 				user.wild { p($0, "wild: \($1)") }.info { UserResponse(id: $0.1.id, msg: "i") },
 				user.info.d { UserResponse(id: $0.1.id, msg: "id") },
 				user.share { UserResponse(id: $0.1.id, msg: "s") },
 				device.foo { DeviceResponse(id: $0.1.id, msg: "d") }
-			])
+			)
 		let fullJson = fullRoutes.path("json").json()
 		let fullText = fullRoutes.path("text").then { "\($0)" }.text()
-		let end = fullText.combine(fullJson)
+		let end = root().dir(fullText, fullJson)
 
-		let request = ShimHTTPRequest()
-		request.uriVariables = ["id":UUID().uuidString]
+//		let request = ShimHTTPRequest()
+//		request.uriVariables = ["id":UUID().uuidString]
 
 		let uri1 = "/v1/user/share/json"
 		let uri2 = "/v1/user/FOOBAR/info/json"
@@ -153,10 +161,10 @@ final class HTTPCRUDLibTests: XCTestCase {
 
 		let finder = try! RouteFinderRegExp(end)
 
-		if let fnd = finder[uri2] {
-			let state = HandlerState(request: request, uri: uri2)
-			let output = try! fnd(state, request)
-			print(String(validatingUTF8: output.body ?? [])!)
+		if let fnd = finder[.GET, uri2] {
+//			let state = HandlerState(request: request, uri: uri2)
+//			let output = try! fnd(state, request)
+//			print(String(validatingUTF8: output.body ?? [])!)
 		}
 	}
 	
@@ -173,8 +181,8 @@ final class HTTPCRUDLibTests: XCTestCase {
 		let finder = try! RouteFinderDual(uri)
 		let uu = UUID().uuidString
 		let uri1 = "/v1/\(uu)/share"
-		let request = ShimHTTPRequest()
-		request.uri = uri1
+//		let request = ShimHTTPRequest()
+//		request.uri = uri1
 		let output = try! request.run(finder: finder)!
 		XCTAssertEqual("\(uu) - share", String(validatingUTF8: output.body ?? [])!)
 	}
@@ -195,77 +203,6 @@ final class HTTPCRUDLibTests: XCTestCase {
 		
 	}
 	
-	func testLookup1Timing() {
-		let uris = ["/v1/device/register",
-					"/v1/device/unregister",
-					"/v1/device/limits",
-					"/v1/device/update",
-					"/v1/device/share",
-					"/v1/device/share/token",
-					"/v1/device/unshare",
-					"/v1/device/obs/delete",
-					"/v1/device/limits",
-					"/v1/device/list",
-					"/v1/device/info",
-					"/v1/device/obs",
-					"/v1/group/create",
-					"/v1/group/device/add",
-					"/v1/group/device/remove",
-					"/v1/group/delete",
-					"/v1/group/update",
-					"/v1/group/device/list",
-					"/v1/group/list"]
-		let routes = root().dir({
-			r in
-			return uris.map { r.path($0) {""}.text() }
-		})
-		
-		let lookup1 = try! ReverseLookup(routes)
-		print(lookup1)
-		self.measure {
-			for _ in 0..<10000 {
-				uris.forEach {
-					_ = lookup1[$0]
-				}
-			}
-		}
-	}
-	func testLookup2Timing() {
-		let uris = ["/v1/device/register",
-					"/v1/device/unregister",
-					"/v1/device/limits",
-					"/v1/device/update",
-					"/v1/device/share",
-					"/v1/device/share/token",
-					"/v1/device/unshare",
-					"/v1/device/obs/delete",
-					"/v1/device/limits",
-					"/v1/device/list",
-					"/v1/device/info",
-					"/v1/device/obs",
-					"/v1/group/create",
-					"/v1/group/device/add",
-					"/v1/group/device/remove",
-					"/v1/group/delete",
-					"/v1/group/update",
-					"/v1/group/device/list",
-					"/v1/group/list"]
-		let routes = root().dir {
-			r in
-			return uris.map { r.path($0) {""}.text() }
-		}
-		
-		let lookup2 = try! RouteFinderDictionary(routes)
-		
-		self.measure {
-			for _ in 0..<10000 {
-				uris.forEach {
-					_ = lookup2[$0]
-				}
-			}
-		}
-	}
-
     static var allTests = [
         ("testExample", testExample),
     ]
