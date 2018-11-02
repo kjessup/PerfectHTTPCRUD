@@ -271,16 +271,28 @@ public extension Routes {
 			}
 		}
 	}
-	func decode<Type: Decodable, NewOut>(_ type: Type.Type,
-										 _ handler: @escaping (OutType, Type) throws -> NewOut) -> Routes<InType, NewOut> {
-		return readBody { a, _ in return a }.request {
-			return try handler($0, try $1.decode(Type.self))
+	func statusCheck(_ handler: @escaping () throws -> HTTPResponseStatus) -> Routes<InType, OutType> {
+		return then {
+			switch try handler().code {
+			case 200..<300:
+				return $0
+			default:
+				throw TerminationType.criteriaFailed
+			}
 		}
 	}
-	func decode<Type: Decodable>(_ type: Type.Type) -> Routes<InType, Type> {
-		return readBody { a, _ in return a }.request {
-			return try $1.decode(Type.self)
+	func decode<Type: Decodable, NewOut>(_ type: Type.Type,
+										 _ handler: @escaping (OutType, Type) throws -> NewOut) -> Routes<InType, NewOut> {
+		return readBody { ($0, $1) }.request {
+			return try handler($0.0, try $1.decode(Type.self, content: $0.1))
 		}
+	}
+	func decode<Type: Decodable, NewOut>(_ type: Type.Type,
+										 _ handler: @escaping (Type) throws -> NewOut) -> Routes<InType, NewOut> {
+		return decode(type) { try handler($1) }
+	}
+	func decode<Type: Decodable>(_ type: Type.Type) -> Routes<InType, Type> {
+		return decode(type) { $1 }
 	}
 }
 
@@ -294,6 +306,17 @@ public extension Routes {
 	}
 	func dir<NewOut>(_ registry: Routes<OutType, NewOut>, _ registries: Routes<OutType, NewOut>...) -> Routes<InType, NewOut> {
 		return dir([registry] + registries)
+	}
+}
+
+public extension Routes {
+	func unwrap<U, NewOut>(_ call: @escaping (U) throws -> NewOut) -> Routes<InType, U> where OutType == Optional<U> {
+		return then {
+			guard let unwrapped = $0 else {
+				throw TerminationType.criteriaFailed
+			}
+			return unwrapped
+		}
 	}
 }
 

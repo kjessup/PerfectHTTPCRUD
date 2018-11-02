@@ -341,7 +341,7 @@ extension String {
 }
 
 public extension Routes {
-	var GET: Routes { return method(.GET) }
+	var GET: Routes<InType, OutType> { return method(.GET) }
 	var POST: Routes { return method(.POST) }
 	var PUT: Routes { return method(.PUT) }
 	var DELETE: Routes { return method(.DELETE) }

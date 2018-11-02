@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import PerfectSQLite
 import PerfectCRUD
 import NIOConcurrencyHelpers
 import NIOHTTP1

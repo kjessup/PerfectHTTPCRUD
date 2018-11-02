@@ -11,36 +11,19 @@ import NIOHTTP1
 /// Extensions on HTTPRequest which permit the request body to be decoded to a Codable type.
 public extension HTTPRequest {
 	/// Decode the request body into the desired type, or throw an error.
-	func decode<A: Decodable>(_ type: A.Type) throws -> A {
-		if let contentType = headers.first(where: { $0.name == "content-type" })?.value,
-				contentType.hasPrefix("application/json") {
-//			guard let body = postBodyBytes else {
-//				throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "This request requires JSON input."))
-//			}
-			let body = [UInt8]()//fix
-			
-			// this is not exactly ideal
-			// fudging url vars and json post body is inefficient
-			let data: Data
-			if !uriVariables.isEmpty,
-				var dict = try JSONSerialization.jsonObject(with: Data(bytes: body), options: []) as? [String:Any] {
-				uriVariables.forEach {
-					let (key, value) = $0
-					dict[key] = value
-				}
-				data = try JSONSerialization.data(withJSONObject: dict, options: [])
-			} else {
-				data = Data(bytes: body)
-			}
-			do {
-				return try JSONDecoder().decode(A.self, from: data)
-			} catch let error as DecodingError
-				where error.localizedDescription == "The data couldn’t be read because it is missing." {
-					throw TerminationType.error(HTTPOutputError(status: .badRequest, description: "Error while decoding request object. This is usually caused by API misuse. Check your request input names."))
-			}
-		} else {
-			return try A.init(from: RequestDecoder(request: self))
+	func decode<A: Decodable>(_ type: A.Type, content: HTTPRequestContentType) throws -> A {
+		let postTuples: [(String, String)]
+		switch content {
+		case .none:
+			postTuples = []
+		case .multiPartForm(let mime):
+			postTuples = mime.bodySpecs.map {($0.fieldName, $0.fieldValue)}
+		case .urlForm(let t):
+			postTuples = t
+		case .other(let body):
+			return try JSONDecoder().decode(A.self, from: Data(bytes: body))
 		}
+		return try A.init(from: RequestDecoder(params: uriVariables.map {($0.key, $0.value)} + searchArgs + postTuples))
 	}
 }
 
@@ -70,21 +53,14 @@ class RequestReader<K : CodingKey>: KeyedDecodingContainerProtocol {
 	var allKeys: [Key] = []
 	let parent: RequestDecoder
 	let params: [(String, String)]
-//	let uploads: [MimeReader.BodySpec]?
-	var request: HTTPRequest { return parent.request }
-	init(_ p: RequestDecoder) {
+	init(_ p: RequestDecoder, params: [(String, String)]) {
 		parent = p
-		params = p.request.searchArgs
-//		uploads = p.request.postFileUploads
+		self.params = params
 	}
 	func getValue<T: LosslessStringConvertible>(_ key: Key) throws -> T {
 		let str: String
 		let keyStr = key.stringValue
-		if let v = request.uriVariables[keyStr] {
-			str = v
-//		} else if let files = uploads, let found = files.first(where: {$0.fieldName == keyStr}) {
-//			str = found.fieldValue
-		} else if let v = params.first(where: {$0.0 == keyStr}) {
+		if let v = params.first(where: {$0.0 == keyStr}) {
 			str = v.1
 		} else {
 			throw DecodingError.keyNotFound(key, .init(codingPath: codingPath, debugDescription: "Key \(keyStr) not found."))
@@ -276,12 +252,12 @@ class RequestUnkeyedReader: UnkeyedDecodingContainer, SingleValueDecodingContain
 class RequestDecoder: Decoder {
 	var codingPath: [CodingKey] = []
 	var userInfo: [CodingUserInfoKey : Any] = [:]
-	let request: HTTPRequest
-	init(request r: HTTPRequest) {
-		request = r
+	let params: [(String, String)]
+	init(params: [(String, String)]) {
+		self.params = params
 	}
 	func container<Key>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> where Key : CodingKey {
-		return KeyedDecodingContainer<Key>(RequestReader<Key>(self))
+		return KeyedDecodingContainer<Key>(RequestReader<Key>(self, params: params))
 	}
 	func unkeyedContainer() throws -> UnkeyedDecodingContainer {
 		return RequestUnkeyedReader(parent: self)

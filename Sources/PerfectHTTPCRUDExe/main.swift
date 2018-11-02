@@ -1,8 +1,6 @@
-import HTTPCRUDLib
 import PerfectCRUD
+import HTTPCRUDLib
 import NIO
-
-CRUDLogging.queryLogDestinations = []
 
 let big1024 = String(repeating: "A", count: 1024)
 let big2048 = String(repeating: "A", count: 2048)
@@ -23,43 +21,76 @@ func printTupes(_ t: [(String, String)]) {
 	}
 }
 
-let routes = root().dir{[
-	$0.GET.dir{[
-		$0.empty { "" },
-		$0.path("1024") { big1024 },
-		$0.path("2048") { big2048 },
-		$0.path("4096") { big4096 },
-		$0.path("8192") { big8192 },
-		$0.getArgs2048 {
-			printTupes($0.searchArgs)
-			return big2048
-		}
-	]},
+checkCRUDRoutes()
+
+let dataRoutes = root().GET.dir{[
+	$0.empty { "" },
+	$0.path("1024") { big1024 },
+	$0.path("2048") { big2048 },
+	$0.path("4096") { big4096 },
+	$0.path("8192") { big8192 },
+]}
+
+let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
+	$0.GET.getArgs2048 {
+		printTupes($0.searchArgs)
+		return big2048
+	},
 	$0.POST.dir{[
 		$0.postArgs2048.readBody {
-			switch $1 {
-			case .urlForm(let params):
+			if case .urlForm(let params) = $1 {
 				printTupes(params)
-			default:
-				()
 			}
 			return big2048
 		},
 		$0.postArgsMulti2048.readBody {
-			switch $1 {
-			case .multiPartForm(let reader):
+			if case .multiPartForm(let reader) = $1 {
 				for c in "abcdefghijklmnopqrstuvwxyz" {
 					let key = prefix + String(c)
 					let _ = reader.bodySpecs.first { $0.fieldName == key }.map { $0.fieldValue }
-//					print(fnd)
+					//					print(fnd)
 				}
-			default:
-				()
 			}
 			return big2048
 		},
 	]}
-]}.text()
+]}
+
+let crudUserRoutes =
+	root()
+		.statusCheck { crudRoutesEnabled ? .ok : .internalServerError }
+		.user
+		.dir{[
+			$0.POST.create.decode(CRUDUser.self) {
+				user throws -> CRUDUser in
+				try crudTable(CRUDUser.self).insert(user)
+				return user
+			}.json(),
+			$0.POST.update.decode(CRUDUser.self) {
+				user throws -> CRUDUser in
+				try crudTable(CRUDUser.self).where(\CRUDUser.id == user.id).update(user)
+				return user
+			}.json(),
+			$0.GET.read.wild {$1}.then {
+				id throws -> CRUDUser in
+				guard let user = try crudTable(CRUDUser.self).where(\CRUDUser.id == id).first() else {
+					throw HTTPOutputError(status: .notFound)
+				}
+				return user
+			}.json(),
+			$0.POST.delete.decode(CRUDUserRequest.self).then {
+				req throws -> CRUDUserRequest in
+				try crudTable(CRUDUser.self).where(\CRUDUser.id == req.id).delete()
+				return req
+			}.json()
+		]
+	}
+
+let routes: Routes<HTTPRequest, HTTPOutput> = root().dir(
+	dataRoutes.text(),
+	argsRoutes.text(),
+	crudUserRoutes
+)
 
 let servers = try (0...System.coreCount).map { _ in return try routes.bind(port: 9000).listen() }
 print("Server listening on port 9000 with \(System.coreCount) cores")

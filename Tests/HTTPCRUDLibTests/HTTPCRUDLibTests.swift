@@ -1,7 +1,6 @@
 import XCTest
 import NIOHTTP1
 import NIO
-import PerfectSQLite
 import PerfectCRUD
 @testable import HTTPCRUDLib
 
