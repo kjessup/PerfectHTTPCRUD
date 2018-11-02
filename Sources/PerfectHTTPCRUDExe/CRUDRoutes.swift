@@ -44,6 +44,7 @@ func checkCRUDRoutes() {
 	do {
 		try crudDB().create(CRUDUser.self, primaryKey: \.id).index(\.firstName, \.lastName)
 		crudRoutesEnabled = true
+		print("CRUD routes enabled.")
 	} catch {
 		crudRoutesEnabled = false
 		print("No database connection. CRUD routes disabled.")
