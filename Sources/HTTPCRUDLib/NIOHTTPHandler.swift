@@ -7,6 +7,21 @@
 
 import NIO
 import NIOHTTP1
+import Dispatch
+
+public extension Routes {
+	func async<NewOut>(_ call: @escaping (OutType, EventLoopPromise<NewOut>) -> ()) -> Routes<InType, NewOut> {
+		return applyFuncs {
+			input in
+			return input.then {
+				box in
+				let p: EventLoopPromise<NewOut> = input.eventLoop.newPromise()
+				DispatchQueue.global().async { call(box.value, p) }
+				return p.futureResult.map { return RouteValueBox(box.state, $0) }
+			}
+		}
+	}
+}
 
 final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	public typealias InboundIn = HTTPServerRequestPart

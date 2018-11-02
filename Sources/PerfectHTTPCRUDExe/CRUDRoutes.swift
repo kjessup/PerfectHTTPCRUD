@@ -6,7 +6,7 @@
 //
 
 import PerfectCRUD
-import PerfectPostgreSQL
+import PerfectSQLite
 
 // This is only here for CENGN testing
 // main HTTPCRUDLib will be moved to real repo
@@ -18,15 +18,14 @@ let dbName = "postgresdb"
 let dbUser = "postgresuser"
 let dbPassword = "postgresuser"
 
-func crudTable<T: Codable>(_ t: T.Type) throws -> Table<T, Database<PostgresDatabaseConfiguration>> {
+typealias SQLite = SQLiteDatabaseConfiguration
+
+func crudTable<T: Codable>(_ t: T.Type) throws -> Table<T, Database<SQLite>> {
 	return try crudDB().table(t)
 }
-func crudDB() throws -> Database<PostgresDatabaseConfiguration> {
+func crudDB() throws -> Database<SQLite> {
 	return Database(configuration:
-		try PostgresDatabaseConfiguration(database: dbName,
-										  host: dbHost,
-										  username: dbUser,
-										  password: dbPassword))
+		try SQLite("file::memory:?cache=shared"))
 }
 
 struct CRUDUser: Codable {
@@ -39,10 +38,13 @@ struct CRUDUserRequest: Codable {
 	let id: String
 }
 
+fileprivate var holdIt: Database<SQLite>?
+
 func checkCRUDRoutes() {
 	CRUDLogging.queryLogDestinations = []
 	do {
-		try crudDB().create(CRUDUser.self, primaryKey: \.id).index(\.firstName, \.lastName)
+		holdIt = try crudDB()
+		try holdIt?.create(CRUDUser.self, primaryKey: \.id).index(\.firstName, \.lastName)
 		crudRoutesEnabled = true
 		print("CRUD routes enabled.")
 	} catch {

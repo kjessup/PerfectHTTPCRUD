@@ -56,16 +56,18 @@ let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
 	]}
 ]}
 
-let crudUserRoutes =
+let create = root().POST.path("create").decode(CRUDUser.self).table(try crudDB(), CRUDUser.self) {
+	(user: CRUDUser, table: Table<CRUDUser, Database<SQLite>>) throws -> CRUDUser in
+	try table.insert(user)
+	return user
+}.json()
+
+let crudUserRoutes: Routes<HTTPRequest, HTTPOutput> =
 	root()
 		.statusCheck { crudRoutesEnabled ? .ok : .internalServerError }
 		.user
-		.dir{[
-			$0.POST.create.decode(CRUDUser.self) {
-				user throws -> CRUDUser in
-				try crudTable(CRUDUser.self).insert(user)
-				return user
-			}.json(),
+		.dir {[
+			create,
 			$0.POST.update.decode(CRUDUser.self) {
 				user throws -> CRUDUser in
 				try crudTable(CRUDUser.self).where(\CRUDUser.id == user.id).update(user)
@@ -82,8 +84,9 @@ let crudUserRoutes =
 				req throws -> CRUDUserRequest in
 				try crudTable(CRUDUser.self).where(\CRUDUser.id == req.id).delete()
 				return req
-			}.json()
-		]
+			}.json(),
+			
+		] as [Routes<HTTPRequest, HTTPOutput>]
 	}
 
 let routes: Routes<HTTPRequest, HTTPOutput> = root().dir(
