@@ -121,7 +121,7 @@ func configureHTTPServerPipeline(pipeline: ChannelPipeline,
 
 class NIOBoundRoutes: BoundRoutes {
 	typealias RegistryType = Routes<HTTPRequest, HTTPOutput>
-	private let childGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+	private let childGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)//System.coreCount)
 	private let channel: Channel
 	public let port: Int
 	public let address: String
@@ -154,7 +154,29 @@ class NIOBoundRoutes: BoundRoutes {
 class NIOListeningRoutes: ListeningRoutes {
 	private let channel: Channel
 	private let f: EventLoopFuture<Void>
+	private static var globalInitialized: Bool = {
+		var sa = sigaction()
+	#if os(Linux)
+		sa.__sigaction_handler.sa_handler = SIG_IGN
+	#else
+		sa.__sigaction_u.__sa_handler = SIG_IGN
+	#endif
+		sa.sa_flags = 0
+		sigaction(SIGPIPE, &sa, nil)
+		var rlmt = rlimit()
+	#if os(Linux)
+		getrlimit(Int32(RLIMIT_NOFILE.rawValue), &rlmt)
+		rlmt.rlim_cur = rlmt.rlim_max
+		setrlimit(Int32(RLIMIT_NOFILE.rawValue), &rlmt)
+	#else
+		getrlimit(RLIMIT_NOFILE, &rlmt)
+		rlmt.rlim_cur = rlim_t(OPEN_MAX)
+		setrlimit(RLIMIT_NOFILE, &rlmt)
+	#endif
+		return true
+	}()
 	init(channel: Channel) {
+		_ = NIOListeningRoutes.globalInitialized
 		self.channel = channel
 		f = channel.closeFuture
 	}

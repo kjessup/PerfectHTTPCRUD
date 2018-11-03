@@ -39,7 +39,11 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	var contentType: String? = nil
 	var contentLength = 0
 	var contentRead = 0
-	var contentConsumed = 0
+	var contentConsumed = 0 {
+		didSet {
+			assert(contentConsumed <= contentRead && contentConsumed <= contentLength)
+		}
+	}
 	
 	let finder: RouteFinder
 	var head: HTTPRequestHead?
@@ -151,6 +155,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		}
 	}
 	func http(head: HTTPRequestHead, ctx: ChannelHandlerContext) {
+		assert(contentLength == 0)
 		readState = .head
 		self.head = head
 		let (path, args) = head.uri.splitUri
@@ -262,6 +267,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		writeState = .none
 		readState = .none
 		head = nil
+		contentLength = 0
+		contentConsumed = 0
+		contentRead = 0
 	}
 	
 	//	func userInboundEventTriggered(ctx: ChannelHandlerContext, event: Any) {

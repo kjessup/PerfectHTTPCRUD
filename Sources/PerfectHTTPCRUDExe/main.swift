@@ -58,6 +58,7 @@ let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
 
 let create = root().POST.path("create").decode(CRUDUser.self).table(try crudDB(), CRUDUser.self) {
 	(user: CRUDUser, table: Table<CRUDUser, Database<SQLite>>) throws -> CRUDUser in
+	
 	try table.insert(user)
 	return user
 }.json()
