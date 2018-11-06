@@ -275,6 +275,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			}
 			reset()
 			channel.writeAndFlush(wrapOutboundOut(.end(nil)), promise: p)
+			if keepAlive {
+				channel.read()
+			}
 		}
 	}
 	
