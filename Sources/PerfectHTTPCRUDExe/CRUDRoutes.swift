@@ -24,8 +24,11 @@ func crudTable<T: Codable>(_ t: T.Type) throws -> Table<T, Database<SQLite>> {
 	return try crudDB().table(t)
 }
 func crudDB() throws -> Database<SQLite> {
-	return Database(configuration:
-		try SQLite("file::memory:?cache=shared"))
+	let db = Database(configuration:
+		try SQLite("file::memory:?cache=shared&mode=rwc"))
+	try db.sql("PRAGMA journal_mode=WAL;")
+	try db.sql("PRAGMA synchronous = NORMAL;")
+	return db
 }
 
 struct CRUDUser: Codable {
@@ -45,6 +48,7 @@ func checkCRUDRoutes() {
 	do {
 		holdIt = try crudDB()
 		try holdIt?.create(CRUDUser.self, primaryKey: \.id).index(\.firstName, \.lastName)
+		try holdIt?.sql("PRAGMA busy_timeout = 600000")
 		crudRoutesEnabled = true
 		print("CRUD routes enabled.")
 	} catch {

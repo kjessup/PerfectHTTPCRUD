@@ -56,10 +56,35 @@ let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
 	]}
 ]}
 
-let create = root().POST.path("create").decode(CRUDUser.self).table(try crudDB(), CRUDUser.self) {
-	(user: CRUDUser, table: Table<CRUDUser, Database<SQLite>>) throws -> CRUDUser in
-	
-	try table.insert(user)
+let create = root().POST.create.decode(CRUDUser.self).db(try crudDB()) {
+	(user: CRUDUser, db: Database<SQLite>) throws -> CRUDUser in
+	try db.sql("BEGIN IMMEDIATE")
+	try db.table(CRUDUser.self).insert(user)
+	try db.sql("COMMIT")
+	return user
+}.json()
+let update = root().POST.update.decode(CRUDUser.self).db(try crudDB()) {
+	user, db throws -> CRUDUser in
+	try db.sql("BEGIN IMMEDIATE")
+	try db.table(CRUDUser.self).where(\CRUDUser.id == user.id).update(user)
+	try db.sql("COMMIT")
+	return user
+}.json()
+let delete = root().POST.delete.decode(CRUDUserRequest.self).db(try crudDB()) {
+	req, db throws -> CRUDUserRequest in
+	try db.sql("BEGIN IMMEDIATE")
+	try db.table(CRUDUser.self).where(\CRUDUser.id == req.id).delete()
+	try db.sql("COMMIT")
+	return req
+}.json()
+
+let read = root().GET.read.wild {$1}.db(try crudDB()) {
+	id, db throws -> CRUDUser in
+	try db.sql("BEGIN IMMEDIATE")
+	guard let user = try db.table(CRUDUser.self).where(\CRUDUser.id == id).first() else {
+		throw HTTPOutputError(status: .notFound)
+	}
+	try db.sql("COMMIT")
 	return user
 }.json()
 
@@ -67,34 +92,17 @@ let crudUserRoutes: Routes<HTTPRequest, HTTPOutput> =
 	root()
 		.statusCheck { crudRoutesEnabled ? .ok : .internalServerError }
 		.user
-		.dir {[
+		.dir(
 			create,
-			$0.POST.update.decode(CRUDUser.self) {
-				user throws -> CRUDUser in
-				try crudTable(CRUDUser.self).where(\CRUDUser.id == user.id).update(user)
-				return user
-			}.json(),
-			$0.GET.read.wild {$1}.then {
-				id throws -> CRUDUser in
-				guard let user = try crudTable(CRUDUser.self).where(\CRUDUser.id == id).first() else {
-					throw HTTPOutputError(status: .notFound)
-				}
-				return user
-			}.json(),
-			$0.POST.delete.decode(CRUDUserRequest.self).then {
-				req throws -> CRUDUserRequest in
-				try crudTable(CRUDUser.self).where(\CRUDUser.id == req.id).delete()
-				return req
-			}.json(),
-			
-		] as [Routes<HTTPRequest, HTTPOutput>]
-	}
+			read,
+			update,
+			delete)
 
-let routes: Routes<HTTPRequest, HTTPOutput> = root().dir(
-	dataRoutes.text(),
-	argsRoutes.text(),
-	crudUserRoutes
-)
+let routes: Routes<HTTPRequest, HTTPOutput> = root()
+//	.then { print($0.uri) ; return $0 }
+	.dir(dataRoutes.text(),
+		 argsRoutes.text(),
+		 crudUserRoutes)
 
 let servers = try (0...System.coreCount).map { _ in return try routes.bind(port: 9000).listen() }
 print("Server listening on port 9000 with \(System.coreCount) cores")

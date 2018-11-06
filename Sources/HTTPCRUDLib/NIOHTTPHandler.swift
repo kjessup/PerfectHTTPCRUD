@@ -16,7 +16,7 @@ public extension Routes {
 			return input.then {
 				box in
 				let p: EventLoopPromise<NewOut> = input.eventLoop.newPromise()
-				DispatchQueue.global().async { call(box.value, p) }
+				foreignEventsQueue.async { call(box.value, p) }
 				return p.futureResult.map { return RouteValueBox(box.state, $0) }
 			}
 		}
@@ -216,10 +216,25 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	}
 	
 	func writeHead(output: HTTPOutput) {
+		guard let head = head else {
+			return
+		}
 		let headers = output.headers ?? HTTPHeaders()
-		let h = HTTPResponseHead(version: head?.version ?? .init(major: 1, minor: 1),
+		var h = HTTPResponseHead(version: head.version,
 								 status: output.status ?? .ok,
 								 headers: headers)
+		if !self.headers.contains(name: "keep-alive") && !self.headers.contains(name: "close") {
+			switch (head.isKeepAlive, head.version.major, head.version.minor) {
+			case (true, 1, 0):
+				// HTTP/1.0 and the request has 'Connection: keep-alive', we should mirror that
+				h.headers.add(name: "Connection", value: "keep-alive")
+			case (false, 1, let n) where n >= 1:
+				// HTTP/1.1 (or treated as such) and the request has 'Connection: close', we should mirror that
+				h.headers.add(name: "Connection", value: "close")
+			default:
+				()
+			}
+		}
 		channel?.write(wrapOutboundOut(.head(h)), promise: nil)
 	}
 	func write(output: HTTPOutput) {

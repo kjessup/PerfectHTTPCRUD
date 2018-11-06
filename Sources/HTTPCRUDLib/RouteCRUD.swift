@@ -12,7 +12,7 @@ import NIO
 
 public typealias DCP = DatabaseConfigurationProtocol
 
-fileprivate let foreignEventsQueue = DispatchQueue(label: "foreignEventsQueue", attributes: .concurrent)
+let foreignEventsQueue = DispatchQueue(label: "foreignEventsQueue")//, attributes: .concurrent)
 
 public extension Routes {
 	func db<C: DCP, NewOut>(_ provide: @autoclosure @escaping () throws -> Database<C>,
