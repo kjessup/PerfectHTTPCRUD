@@ -52,6 +52,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	var pendingPromise: EventLoopPromise<[ByteBuffer]>?
 	var readState = State.none
 	var writeState = State.none
+	var forceKeepAlive: Bool? = nil
 	
 	init(finder: RouteFinder) {
 		self.finder = finder
@@ -139,9 +140,11 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			}
 		}
 	}
-	
 	func channelActive(ctx: ChannelHandlerContext) {
 		channel = ctx.channel
+	}
+	func channelInactive(ctx: ChannelHandlerContext) {
+		return
 	}
 	func channelRead(ctx: ChannelHandlerContext, data: NIOAny) {
 		let reqPart = self.unwrapInboundIn(data)
@@ -209,6 +212,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			pendingPromise = nil
 			readSomeContent(p)
 		}
+		if contentRead == contentLength {
+			readState = .end
+		}
 	}
 	func http(end: HTTPHeaders?, ctx: ChannelHandlerContext) {
 		readState = .end
@@ -267,7 +273,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		}
 		if let channel = self.channel {
 			let p: EventLoopPromise<Void> = channel.eventLoop.newPromise()
-			let keepAlive = head?.isKeepAlive ?? false
+			let keepAlive = forceKeepAlive ?? head?.isKeepAlive ?? false
 			p.futureResult.whenComplete {
 				if !keepAlive {
 					channel.close(promise: nil)
@@ -288,6 +294,25 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		contentLength = 0
 		contentConsumed = 0
 		contentRead = 0
+		forceKeepAlive = nil
+	}
+	
+	func userInboundEventTriggered(ctx: ChannelHandlerContext, event: Any) {
+		switch event {
+		case let evt as ChannelEvent where evt == ChannelEvent.inputClosed:
+			// The remote peer half-closed the channel. At this time, any
+			// outstanding response will now get the channel closed, and
+			// if we are idle or waiting for a request body to finish we
+			// will close the channel immediately.
+			switch readState {
+			case .none, .body:
+				ctx.close(promise: nil)
+			case .end, .head:
+				forceKeepAlive = false
+			}
+		default:
+			ctx.fireUserInboundEventTriggered(event)
+		}
 	}
 	
 	//	func userInboundEventTriggered(ctx: ChannelHandlerContext, event: Any) {
