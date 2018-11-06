@@ -131,7 +131,7 @@ class NIOBoundRoutes: BoundRoutes {
 		self.address = address
 		channel = try ServerBootstrap(group: childGroup)
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
-			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 9223372036854775807)
+			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 256)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
 			.childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
