@@ -122,7 +122,7 @@ func configureHTTPServerPipeline(pipeline: ChannelPipeline,
 class NIOBoundRoutes: BoundRoutes {
 	typealias RegistryType = Routes<HTTPRequest, HTTPOutput>
 	private let childGroup: MultiThreadedEventLoopGroup
-	let acceptGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+	let acceptGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 	private let channel: Channel
 	public let port: Int
 	public let address: String
@@ -141,7 +141,7 @@ class NIOBoundRoutes: BoundRoutes {
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
 			.childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
 			.childChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 3)
+			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
 			.childChannelOption(ChannelOptions.autoRead, value: false)
 			.childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
 			.childChannelInitializer {

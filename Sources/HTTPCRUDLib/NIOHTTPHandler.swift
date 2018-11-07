@@ -142,6 +142,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	}
 	func channelActive(ctx: ChannelHandlerContext) {
 		channel = ctx.channel
+		channel?.read()
 	}
 	func channelInactive(ctx: ChannelHandlerContext) {
 		return
@@ -194,6 +195,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			}
 			self.flush(output: output)
 		}
+		if contentLength > 0 {
+			channel?.read()
+		}
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {
 		readState = .body
@@ -217,7 +221,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		}
 	}
 	func http(end: HTTPHeaders?, ctx: ChannelHandlerContext) {
-		readState = .end
+		//readState = .end
 		
 	}
 	
@@ -313,6 +317,10 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		default:
 			ctx.fireUserInboundEventTriggered(event)
 		}
+	}
+	
+	func channelReadComplete(ctx: ChannelHandlerContext) {
+		return
 	}
 	
 	//	func userInboundEventTriggered(ctx: ChannelHandlerContext, event: Any) {
