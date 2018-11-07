@@ -52,7 +52,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	var pendingPromise: EventLoopPromise<[ByteBuffer]>?
 	var readState = State.none
 	var writeState = State.none
-	var forceKeepAlive: Bool? = false// TESTINGnil
+	var forceKeepAlive: Bool? = nil
 	
 	init(finder: RouteFinder) {
 		self.finder = finder
