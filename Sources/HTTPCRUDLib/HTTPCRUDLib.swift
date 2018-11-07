@@ -44,19 +44,19 @@ extension String {
 	}
 	var decodedQuery: [(String, String)] {
 		var ret: [(String, String)] = []
-		let ampChar = CharacterSet(charactersIn: "&")
-		let eqChar = CharacterSet(charactersIn: "=")
+		let ampChar = "&"
+		let eqChar = "="
 		var pos: String.Index = startIndex
 		let end = endIndex
 		
 		func makeTuple(_ range: Range<String.Index>) -> (String, String) {
-			guard let r = self.rangeOfCharacter(from: eqChar, range: range) else {
+			guard let r = self.range(of: eqChar, range: range) else {
 				return (String(self[range]), "")
 			}
 			return (String(self[range.lowerBound..<r.lowerBound]).stringByDecodingURL ?? "",
 					String(self[r.upperBound..<range.upperBound]).stringByDecodingURL ?? "")
 		}
-		while let amp = rangeOfCharacter(from: ampChar, range: pos..<end) {
+		while let amp = range(of: ampChar, range: pos..<end) {
 			ret.append(makeTuple(pos..<amp.lowerBound))
 			pos = amp.upperBound
 		}

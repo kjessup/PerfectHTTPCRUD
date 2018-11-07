@@ -103,6 +103,7 @@ let routes: Routes<HTTPRequest, HTTPOutput> = root()
 	.dir(dataRoutes.text(),
 		 argsRoutes.text(),
 		 crudUserRoutes)
+
 let count = System.coreCount
 let servers = try (0..<count).map { _ in return try routes.bind(port: 9000).listen() }
 print("Server listening on port 9000 with \(System.coreCount) cores")
