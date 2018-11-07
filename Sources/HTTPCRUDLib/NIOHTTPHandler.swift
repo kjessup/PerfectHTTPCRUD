@@ -292,6 +292,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	}
 	
 	func reset() {
+		// !FIX! this. it's prone to break when future mutable properties are added
 		writeState = .none
 		readState = .none
 		head = nil
@@ -299,6 +300,11 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		contentConsumed = 0
 		contentRead = 0
 		forceKeepAlive = nil
+		
+		uriVariables = [:]
+		path = ""
+		searchArgs = []
+		contentType = nil
 	}
 	
 	func userInboundEventTriggered(ctx: ChannelHandlerContext, event: Any) {

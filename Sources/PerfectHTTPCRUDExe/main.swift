@@ -7,10 +7,6 @@ let big2048 = String(repeating: "A", count: 2048)
 let big4096 = String(repeating: "A", count: 4096)
 let big8192 = String(repeating: "A", count: 8192)
 
-struct ID: Codable {
-	let id: String
-}
-
 let prefix = "abc"
 
 func printTupes(_ t: [(String, String)]) {
@@ -80,11 +76,9 @@ let delete = root().POST.delete.decode(CRUDUserRequest.self).db(try crudDB()) {
 
 let read = root().GET.read.wild {$1}.db(try crudDB()) {
 	id, db throws -> CRUDUser in
-	try db.sql("BEGIN IMMEDIATE")
 	guard let user = try db.table(CRUDUser.self).where(\CRUDUser.id == id).first() else {
 		throw HTTPOutputError(status: .notFound)
 	}
-	try db.sql("COMMIT")
 	return user
 }.json()
 
