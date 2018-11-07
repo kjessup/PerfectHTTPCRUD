@@ -122,7 +122,7 @@ func configureHTTPServerPipeline(pipeline: ChannelPipeline,
 class NIOBoundRoutes: BoundRoutes {
 	typealias RegistryType = Routes<HTTPRequest, HTTPOutput>
 	private let childGroup: MultiThreadedEventLoopGroup
-	//let acceptGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+	let acceptGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
 	private let channel: Channel
 	public let port: Int
 	public let address: String
@@ -134,9 +134,9 @@ class NIOBoundRoutes: BoundRoutes {
 		let finder = try RouteFinderDual(registry)
 		self.port = port
 		self.address = address
-		channel = try ServerBootstrap(group: childGroup)
+		channel = try ServerBootstrap(group: acceptGroup, childGroup: childGroup)
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
-			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 72)
+			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 256)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
 			.childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
@@ -194,11 +194,11 @@ class NIOListeningRoutes: ListeningRoutes {
 	}
 }
 
-//let serverThreadGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+let serverThreadGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 
 public extension Routes where InType == HTTPRequest, OutType == HTTPOutput {
 	func bind(port: Int, address: String = "0.0.0.0") throws -> BoundRoutes {
-		return try NIOBoundRoutes(registry: self, port: port, address: address, threadGroup: MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount))
+		return try NIOBoundRoutes(registry: self, port: port, address: address, threadGroup: serverThreadGroup)//MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount))
 	}
 }
 
