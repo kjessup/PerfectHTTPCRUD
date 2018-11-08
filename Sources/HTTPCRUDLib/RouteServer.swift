@@ -9,6 +9,7 @@ import NIO
 import NIOHTTP1
 import Dispatch
 import Foundation
+import PerfectNet
 
 /* TODO
 struct requestinfoforlogging {
@@ -134,6 +135,17 @@ class NIOBoundRoutes: BoundRoutes {
 		let finder = try RouteFinderDual(registry)
 		self.port = port
 		self.address = address
+		
+		let tmpnet = NetTCP()
+		tmpnet.initSocket(family: AF_INET)
+		let tmpfd = tmpnet.fd.fd
+		
+		var one = Int32(1)
+		setsockopt(tmpfd, SOL_SOCKET, SO_REUSEPORT, &one, UInt32(MemoryLayout<Int32>.size))
+		setsockopt(tmpfd, SOL_SOCKET, SO_REUSEADDR, &one, UInt32(MemoryLayout<Int32>.size))
+		try tmpnet.bind(port: UInt16(port), address: address)
+		tmpnet.fd.fd = -1
+		
 		channel = try ServerBootstrap(group: acceptGroup, childGroup: childGroup)
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
 			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 256)
@@ -150,7 +162,7 @@ class NIOBoundRoutes: BoundRoutes {
 				.then {
 					channel.pipeline.add(handler: NIOHTTPHandler(finder: finder))
 				}
-			}.bind(host: address, port: port).wait()
+			}.withBoundSocket(descriptor: tmpfd).wait() //.bind(host: address, port: port).wait()
 	}
 	public func listen() throws -> ListeningRoutes {
 		return NIOListeningRoutes(channel: channel)
