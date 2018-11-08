@@ -146,7 +146,7 @@ class NIOBoundRoutes: BoundRoutes {
 //		try acceptor.bind(port: UInt16(port), address: address)
 //		acceptor.fd.fd = -1
 		
-		channel = try ServerBootstrap(group: acceptGroup)//, childGroup: childGroup)
+		channel = try ServerBootstrap(group: acceptGroup, childGroup: childGroup)
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
 			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
