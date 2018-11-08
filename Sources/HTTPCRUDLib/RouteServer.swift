@@ -162,7 +162,6 @@ class NIOBoundRoutes: BoundRoutes {
 					channel.pipeline.add(handler: NIOHTTPHandler(finder: finder))
 				}
 			}.withBoundSocket(descriptor: fd).wait() //.bind(host: address, port: port).wait()
-		channel.
 	}
 	public func listen() throws -> ListeningRoutes {
 		return NIOListeningRoutes(channel: channel)
