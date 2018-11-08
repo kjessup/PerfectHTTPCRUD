@@ -135,18 +135,18 @@ class NIOBoundRoutes: BoundRoutes {
 		self.port = port
 		self.address = address
 		
-		let acceptor = NetTCP()
-		acceptor.initSocket(family: AF_INET)
-		acceptor.fd.switchToBlocking()
-		let fd = acceptor.fd.fd
+//		let acceptor = NetTCP()
+//		acceptor.initSocket(family: AF_INET)
+//		acceptor.fd.switchToBlocking()
+//		let fd = acceptor.fd.fd
+//		
+//		var one = Int32(1)
+//		setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, UInt32(MemoryLayout<Int32>.size))
+//		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, UInt32(MemoryLayout<Int32>.size))
+//		try acceptor.bind(port: UInt16(port), address: address)
+//		acceptor.fd.fd = -1
 		
-		var one = Int32(1)
-		setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, UInt32(MemoryLayout<Int32>.size))
-		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, UInt32(MemoryLayout<Int32>.size))
-		try acceptor.bind(port: UInt16(port), address: address)
-		acceptor.fd.fd = -1
-		
-		channel = try ServerBootstrap(group: acceptGroup, childGroup: childGroup)
+		channel = try ServerBootstrap(group: acceptGroup)//, childGroup: childGroup)
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
 			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
@@ -162,7 +162,7 @@ class NIOBoundRoutes: BoundRoutes {
 				.then {
 					channel.pipeline.add(handler: NIOHTTPHandler(finder: finder))
 				}
-			}.withBoundSocket(descriptor: fd).wait() //.bind(host: address, port: port).wait()
+			}.bind(host: address, port: port).wait()
 	}
 	public func listen() throws -> ListeningRoutes {
 		return NIOListeningRoutes(channel: channel)
