@@ -7,7 +7,6 @@
 
 import NIO
 import NIOHTTP1
-import Dispatch
 
 public extension Routes {
 	func async<NewOut>(_ call: @escaping (OutType, EventLoopPromise<NewOut>) -> ()) -> Routes<InType, NewOut> {
