@@ -195,7 +195,7 @@ class NIOListeningRoutes: ListeningRoutes {
 	}
 }
 
-let serverThreadGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+let serverThreadGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount*2)
 
 public extension Routes where InType == HTTPRequest, OutType == HTTPOutput {
 	func bind(port: Int, address: String = "0.0.0.0") throws -> BoundRoutes {
