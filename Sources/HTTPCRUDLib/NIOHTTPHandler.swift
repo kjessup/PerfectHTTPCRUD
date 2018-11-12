@@ -200,9 +200,8 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		contentRead = 0
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {
-		if case .head = readState {
-			runRequest()
-		}
+		let onlyHead = readState == .head
+		
 		readState = .body
 		let readable = body.readableBytes
 		if contentRead + readable > contentLength {
@@ -221,6 +220,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		}
 		if contentRead == contentLength {
 			readState = .end
+		}
+		if onlyHead {
+			runRequest()
 		}
 	}
 	func http(end: HTTPHeaders?, ctx: ChannelHandlerContext) {
