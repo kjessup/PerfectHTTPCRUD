@@ -99,8 +99,12 @@ let routes: Routes<HTTPRequest, HTTPOutput> = root()
 		 argsRoutes.text(),
 		 jsonRoute,
 		 crudUserRoutes)
-
+#if os(Linux)
 let count = System.coreCount
-let servers = try (0..<count).map { _ in return try routes.bind(port: 9000).listen() }
+#else
+let count = 1
+#endif
+
+let servers = try routes.bind(count: count, port: 9000).map { try $0.listen() }
 print("Server listening on port 9000 with \(System.coreCount) cores")
 try servers.forEach { try $0.wait() }

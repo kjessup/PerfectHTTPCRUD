@@ -122,29 +122,33 @@ func configureHTTPServerPipeline(pipeline: ChannelPipeline,
 class NIOBoundRoutes: BoundRoutes {
 	typealias RegistryType = Routes<HTTPRequest, HTTPOutput>
 	private let childGroup: EventLoopGroup
-	let acceptGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+	let acceptGroup: MultiThreadedEventLoopGroup
 	private let channel: Channel
 	public let port: Int
 	public let address: String
 	init(registry: RegistryType,
 		 port: Int,
-		 address: String//,
-//		 threadGroup: EventLoopGroup
+		 address: String,
+		 threadGroup: EventLoopGroup?
 		) throws {
-		childGroup = acceptGroup//threadGroup
+		let ag = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+		acceptGroup = ag
+		childGroup = threadGroup ?? ag
 		let finder = try RouteFinderDual(registry)
 		self.port = port
 		self.address = address
 		
-		channel = try ServerBootstrap(group: acceptGroup, childGroup: childGroup)
+		var bs = ServerBootstrap(group: acceptGroup, childGroup: childGroup)
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
 			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
-			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+		if threadGroup == nil {
+			bs = bs.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
+		}
+		channel = try bs
 			.childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
 			.childChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
 			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
-//			.childChannelOption(ChannelOptions.autoRead, value: false)
 			.childChannelOption(ChannelOptions.autoRead, value: true)
 			.childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
 			.childChannelInitializer {
@@ -187,6 +191,7 @@ class NIOListeningRoutes: ListeningRoutes {
 	init(channel: Channel) {
 		_ = NIOListeningRoutes.globalInitialized
 		self.channel = channel
+		channel.read()
 		f = channel.closeFuture
 	}
 	public func stop() {
@@ -201,7 +206,21 @@ class NIOListeningRoutes: ListeningRoutes {
 
 public extension Routes where InType == HTTPRequest, OutType == HTTPOutput {
 	func bind(port: Int, address: String = "0.0.0.0") throws -> BoundRoutes {
-		return try NIOBoundRoutes(registry: self, port: port, address: address)//, threadGroup: MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount))
+		return try NIOBoundRoutes(registry: self,
+								  port: port,
+								  address: address,
+								  threadGroup: MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount))
+	}
+	func bind(count: Int, port: Int, address: String = "0.0.0.0") throws -> [BoundRoutes] {
+		if count == 1 {
+			return [try bind(port: port, address: address)]
+		}
+		return try (0..<count).map { _ in
+			return try NIOBoundRoutes(registry: self,
+									  port: port,
+									  address: address,
+									  threadGroup: nil)
+		}
 	}
 }
 
