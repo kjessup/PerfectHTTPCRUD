@@ -52,11 +52,20 @@ let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
 	]}
 ]}
 
+let jsonRoute = root().POST.path("json").decode(CRUDUser.self).json()
+
 let create = root().POST.create.decode(CRUDUser.self).db(try crudDB()) {
 	(user: CRUDUser, db: Database<SQLite>) throws -> CRUDUser in
 	try db.sql("BEGIN IMMEDIATE")
 	try db.table(CRUDUser.self).insert(user)
 	try db.sql("COMMIT")
+	return user
+}.json()
+let read = root().GET.read.wild {$1}.db(try crudDB()) {
+	id, db throws -> CRUDUser in
+	guard let user = try db.table(CRUDUser.self).where(\CRUDUser.id == id).first() else {
+		throw HTTPOutputError(status: .notFound)
+	}
 	return user
 }.json()
 let update = root().POST.update.decode(CRUDUser.self).db(try crudDB()) {
@@ -74,14 +83,6 @@ let delete = root().POST.delete.decode(CRUDUserRequest.self).db(try crudDB()) {
 	return req
 }.json()
 
-let read = root().GET.read.wild {$1}.db(try crudDB()) {
-	id, db throws -> CRUDUser in
-	guard let user = try db.table(CRUDUser.self).where(\CRUDUser.id == id).first() else {
-		throw HTTPOutputError(status: .notFound)
-	}
-	return user
-}.json()
-
 let crudUserRoutes: Routes<HTTPRequest, HTTPOutput> =
 	root()
 		.statusCheck { crudRoutesEnabled ? .ok : .internalServerError }
@@ -96,6 +97,7 @@ let routes: Routes<HTTPRequest, HTTPOutput> = root()
 //	.then { print($0.uri) ; return $0 }
 	.dir(dataRoutes.text(),
 		 argsRoutes.text(),
+		 jsonRoute,
 		 crudUserRoutes)
 
 let count = System.coreCount

@@ -128,9 +128,10 @@ class NIOBoundRoutes: BoundRoutes {
 	public let address: String
 	init(registry: RegistryType,
 		 port: Int,
-		 address: String,
-		 threadGroup: EventLoopGroup) throws {
-		childGroup = threadGroup
+		 address: String//,
+//		 threadGroup: EventLoopGroup
+		) throws {
+		childGroup = acceptGroup//threadGroup
 		let finder = try RouteFinderDual(registry)
 		self.port = port
 		self.address = address
@@ -199,7 +200,7 @@ class NIOListeningRoutes: ListeningRoutes {
 
 public extension Routes where InType == HTTPRequest, OutType == HTTPOutput {
 	func bind(port: Int, address: String = "0.0.0.0") throws -> BoundRoutes {
-		return try NIOBoundRoutes(registry: self, port: port, address: address, threadGroup: MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount))
+		return try NIOBoundRoutes(registry: self, port: port, address: address)//, threadGroup: MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount))
 	}
 }
 
