@@ -157,19 +157,8 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			http(end: headers, ctx: ctx)
 		}
 	}
-	func http(head: HTTPRequestHead, ctx: ChannelHandlerContext) {
-		assert(contentLength == 0)
-		readState = .head
-		self.head = head
-		let (path, args) = head.uri.splitQuery
-		self.path = path
-		if let args = args {
-			searchArgs = QueryDecoder(Array(args.utf8))
-		}
-		contentType = head.headers["content-type"].first
-		contentLength = Int(head.headers["content-length"].first ?? "0") ?? 0
-		contentRead = 0
-		guard let fnc = finder[head.method, path] else {
+	func runRequest() {
+		guard let head = self.head, let fnc = finder[head.method, path] else {
 			return flush(output: HTTPOutputError(status: .notFound, description: "No route for URI."))
 		}
 		let state = HandlerState(request: self, uri: path)
@@ -196,12 +185,24 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			}
 			self.flush(output: output)
 		}
-		if contentLength > 0 {
-			
-			
+	}
+	func http(head: HTTPRequestHead, ctx: ChannelHandlerContext) {
+		assert(contentLength == 0)
+		readState = .head
+		self.head = head
+		let (path, args) = head.uri.splitQuery
+		self.path = path
+		if let args = args {
+			searchArgs = QueryDecoder(Array(args.utf8))
 		}
+		contentType = head.headers["content-type"].first
+		contentLength = Int(head.headers["content-length"].first ?? "0") ?? 0
+		contentRead = 0
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {
+		if case .head = readState {
+			runRequest()
+		}
 		readState = .body
 		let readable = body.readableBytes
 		if contentRead + readable > contentLength {
@@ -223,8 +224,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		}
 	}
 	func http(end: HTTPHeaders?, ctx: ChannelHandlerContext) {
-		//readState = .end
-		
+		if case .head = readState {
+			runRequest()
+		}
 	}
 	
 	func writeHead(output: HTTPOutput) {
