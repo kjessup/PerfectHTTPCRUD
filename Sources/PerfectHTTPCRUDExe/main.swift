@@ -9,10 +9,10 @@ let big8192 = String(repeating: "A", count: 8192)
 
 let prefix = "abc"
 
-func printTupes(_ t: [(String, String)]) {
+func printTupes(_ t: QueryDecoder) {
 	for c in "abcdefghijklmnopqrstuvwxyz" {
 		let key = prefix + String(c)
-		let _ = t.first { $0.0 == key }.map { $0.1 }
+		let _ = t.get(key)
 		//				print(fnd)
 	}
 }
@@ -29,7 +29,9 @@ let dataRoutes = root().GET.dir{[
 
 let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
 	$0.GET.getArgs2048 {
-		printTupes($0.searchArgs)
+		if let qd = $0.searchArgs {
+			printTupes(qd)
+		}
 		return big2048
 	},
 	$0.POST.dir{[

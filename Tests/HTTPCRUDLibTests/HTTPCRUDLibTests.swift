@@ -38,6 +38,22 @@ import PerfectCRUD
 //}
 
 final class HTTPCRUDLibTests: XCTestCase {
+	func testScratch0() {
+		let q = QueryDecoder(Array("a=1&b=2&c=3&d=4&b=5&e&f=&g=1234567890&h".utf8))
+		
+		XCTAssertEqual(q["not"], [])
+		XCTAssertEqual(q["a"], ["1"])
+		XCTAssertEqual(q["b"], ["2", "5"])
+		XCTAssertEqual(q["c"], ["3"])
+		XCTAssertEqual(q["d"], ["4"])
+		XCTAssertEqual(q["e"], [""])
+		XCTAssertEqual(q["f"], [""])
+		XCTAssertEqual(q["g"], ["1234567890"])
+		XCTAssertEqual(q["h"], [""])
+		
+		print("\(q.lookup)")
+		print("\(q.ranges)")
+	}
     func testScratch() {
 		let uris = ["/v1/device/register",
 					"/v1/device/unregister",
@@ -182,8 +198,8 @@ final class HTTPCRUDLibTests: XCTestCase {
 		let uri1 = "/v1/\(uu)/share"
 //		let request = ShimHTTPRequest()
 //		request.uri = uri1
-		let output = try! request.run(finder: finder)!
-		XCTAssertEqual("\(uu) - share", String(validatingUTF8: output.body ?? [])!)
+//		let output = try! request.run(finder: finder)!
+//		XCTAssertEqual("\(uu) - share", String(validatingUTF8: output.body ?? [])!)
 	}
 	
 	func testToDo() {

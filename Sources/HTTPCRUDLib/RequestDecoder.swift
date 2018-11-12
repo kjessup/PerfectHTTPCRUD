@@ -19,11 +19,12 @@ public extension HTTPRequest {
 		case .multiPartForm(let mime):
 			postTuples = mime.bodySpecs.map {($0.fieldName, $0.fieldValue)}
 		case .urlForm(let t):
-			postTuples = t
+			postTuples = t.map {$0}
 		case .other(let body):
 			return try JSONDecoder().decode(A.self, from: Data(bytes: body))
 		}
-		return try A.init(from: RequestDecoder(params: uriVariables.map {($0.key, $0.value)} + searchArgs + postTuples))
+		return try A.init(from:
+			RequestDecoder(params: uriVariables.map {($0.key, $0.value)} + (searchArgs?.map {$0} ?? []) + postTuples))
 	}
 }
 

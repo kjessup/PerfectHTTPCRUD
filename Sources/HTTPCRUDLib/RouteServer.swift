@@ -17,7 +17,7 @@ struct requestinfoforlogging {
 public enum HTTPRequestContentType {
 	case none,
 		multiPartForm(MimeReader),
-		urlForm([(String, String)]),
+		urlForm(QueryDecoder),
 		other([UInt8])
 }
 
@@ -27,7 +27,7 @@ public protocol HTTPRequest {
 	var headers: HTTPHeaders { get }
 	var uriVariables: [String:String] { get set }
 	var path: String { get }
-	var searchArgs: [(String, String)] { get }
+	var searchArgs: QueryDecoder? { get }
 	var contentType: String? { get }
 	var contentLength: Int { get }
 	var contentRead: Int { get }

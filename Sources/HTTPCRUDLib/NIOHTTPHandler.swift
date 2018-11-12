@@ -34,7 +34,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	var headers: HTTPHeaders { return head?.headers ?? .init() }
 	var uriVariables: [String:String] = [:]
 	var path: String = ""
-	var searchArgs: [(String, String)] = []
+	var searchArgs: QueryDecoder?
 	var contentType: String? = nil
 	var contentLength = 0
 	var contentRead = 0
@@ -94,7 +94,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			readContent(p)
 			if ct.hasPrefix("application/x-www-form-urlencoded") {
 				ret = p.futureResult.map {
-					.urlForm((String(validatingUTF8: $0) ?? "").decodedQuery)
+					.urlForm(QueryDecoder($0))
 				}
 			} else {
 				ret = p.futureResult.map { .other($0) }
@@ -147,7 +147,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		return
 	}
 	func channelRead(ctx: ChannelHandlerContext, data: NIOAny) {
-		let reqPart = self.unwrapInboundIn(data)
+		let reqPart = unwrapInboundIn(data)
 		switch reqPart {
 		case .head(let head):
 			http(head: head, ctx: ctx)
@@ -161,9 +161,11 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		assert(contentLength == 0)
 		readState = .head
 		self.head = head
-		let (path, args) = head.uri.splitUri
+		let (path, args) = head.uri.splitQuery
 		self.path = path
-		searchArgs = args
+		if let args = args {
+			searchArgs = QueryDecoder(Array(args.utf8))
+		}
 		contentType = head.headers["content-type"].first
 		contentLength = Int(head.headers["content-length"].first ?? "0") ?? 0
 		contentRead = 0
@@ -195,7 +197,8 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			self.flush(output: output)
 		}
 		if contentLength > 0 {
-			channel?.read()
+			
+			
 		}
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {
@@ -302,7 +305,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		
 		uriVariables = [:]
 		path = ""
-		searchArgs = []
+		searchArgs = nil
 		contentType = nil
 	}
 	
