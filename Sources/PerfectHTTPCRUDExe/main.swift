@@ -2,10 +2,9 @@ import PerfectCRUD
 import HTTPCRUDLib
 import NIO
 
-let big1024 = String(repeating: "A", count: 1024)
 let big2048 = String(repeating: "A", count: 2048)
-let big4096 = String(repeating: "A", count: 4096)
 let big8192 = String(repeating: "A", count: 8192)
+let big32768 = String(repeating: "A", count: 32768)
 
 let prefix = "abc"
 
@@ -21,10 +20,9 @@ checkCRUDRoutes()
 
 let dataRoutes = root().GET.dir{[
 	$0.empty { "" },
-	$0.path("1024") { big1024 },
 	$0.path("2048") { big2048 },
-	$0.path("4096") { big4096 },
 	$0.path("8192") { big8192 },
+	$0.path("32768") { big32768 },
 ]}
 
 let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
