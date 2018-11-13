@@ -38,6 +38,41 @@ import PerfectCRUD
 //}
 
 final class HTTPCRUDLibTests: XCTestCase {
+	func testByteBufferCollection() {
+		let alloc = ByteBufferAllocator()
+		func b(_ s: String) -> ByteBuffer {
+			var b = alloc.buffer(capacity: s.count)
+			b.write(string: s)
+			return b
+		}
+		do {
+			let buffers = [b("012"), b("34"), b("5678"), b("9")]
+			let collection = ByteBufferCollection(buffers: buffers)
+			XCTAssertEqual(10, collection.count)
+			for i in 0...9 {
+				let c = Character(Unicode.Scalar(collection[i]))
+				XCTAssertEqual("\(i)", "\(c)")
+			}
+		}
+		do {
+			let buffers = [b("0000"), b("012"), b("34"), b("5678"), b("9")]
+			let collection = ByteBufferCollection(buffers: buffers, offset: 4)
+			XCTAssertEqual(10, collection.count)
+			for i in 0...9 {
+				let c = Character(Unicode.Scalar(collection[i]))
+				XCTAssertEqual("\(i)", "\(c)")
+			}
+		}
+		do {
+			let buffers = [b("0123456789")]
+			let collection = ByteBufferCollection(buffers: buffers)
+			XCTAssertEqual(10, collection.count)
+			for i in 0...9 {
+				let c = Character(Unicode.Scalar(collection[i]))
+				XCTAssertEqual("\(i)", "\(c)")
+			}
+		}
+	}
 	func testQueryDecoder() {
 		let q = QueryDecoder(Array("a=1&b=2&c=3&d=4&b=5&e&f=&g=1234567890&h".utf8))
 		

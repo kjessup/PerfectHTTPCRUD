@@ -17,8 +17,8 @@
 //===----------------------------------------------------------------------===//
 //
 
+import Foundation
 #if os(Linux)
-	import Foundation
 	import LinuxBridge
 	let S_IRUSR = __S_IREAD
 	let S_IRGRP	= (S_IRUSR >> 3)
@@ -202,11 +202,8 @@ public final class MimeReader {
 		while position != end {
 			switch state {
 			case .stateDone, .stateNone:
-				
 				return .stateNone
-				
 			case .stateBoundary:
-				
 				if position.distance(to: end) < boundary.count + 2 {
 					buffer = Array(byts[position..<end])
 					clearBuffer = false
@@ -226,15 +223,11 @@ public final class MimeReader {
 						position = end
 					}
 				}
-				
 			case .stateHeader:
-				
 				var eolPos = position
 				while eolPos.distance(to: end) > 1 {
-					
 					let b1 = byts[eolPos]
 					let b2 = byts[eolPos.advanced(by: 1)]
-					
 					if b1 == mime_cr && b2 == mime_lf {
 						break
 					}
@@ -245,26 +238,22 @@ public final class MimeReader {
 					clearBuffer = false
 					position = end
 				} else {
-					
 					let spec = bodySpecs.last!
 					if eolPos != position {
-						
 						let check = isField(name: kContentDisposition, bytes: byts, start: position)
 						if check != end { // yes, content-disposition
-							
-							let line = UTF8Encoding.encode(bytes: byts[check.advanced(by: 2)..<eolPos])
+							var lineRange = byts[check.advanced(by: 2)..<eolPos]
+							let line = String(bytesNoCopy: &lineRange, length: lineRange.count, encoding: .utf8, freeWhenDone: false) ?? ""
 							let name = pullValue(name: "name", from: line)
 							let fileName = pullValue(name: "filename", from: line)
-							
 							spec.fieldName = name
 							spec.fileName = fileName
-							
 						} else {
-							
 							let check = isField(name: kContentType, bytes: byts, start: position)
 							if check != end { // yes, content-type
-								
-								spec.contentType = UTF8Encoding.encode(bytes: byts[check.advanced(by: 2)..<eolPos])
+								var lineRange = byts[check.advanced(by: 2)..<eolPos]
+								let line = String(bytesNoCopy: &lineRange, length: lineRange.count, encoding: .utf8, freeWhenDone: false) ?? ""
+								spec.contentType = line
 								
 							}
 						}
@@ -282,28 +271,24 @@ public final class MimeReader {
 					}
 				}
 			case .stateFieldValue:
-				
 				let spec = bodySpecs.last!
 				while position != end {
 					if byts[position] == mime_cr {
-						
 						if position.distance(to: end) == 1 {
 							buffer = Array(byts[position..<end])
 							clearBuffer = false
 							position = end
 							continue
 						}
-						
 						if byts[position.advanced(by: 1)] == mime_lf {
-							
 							if isBoundaryStart(bytes: byts, start: position.advanced(by: 2)) {
-								
 								position = position.advanced(by: 2)
 								state = .stateBoundary
-								spec.fieldValue = UTF8Encoding.encode(bytes: spec.fieldValueTempBytes!)
+								var bytes = spec.fieldValueTempBytes ?? []
+								let line = String(bytesNoCopy: &bytes, length: bytes.count, encoding: .utf8, freeWhenDone: false) ?? ""
+								spec.fieldValue = line
 								spec.fieldValueTempBytes = nil
 								break
-								
 							} else if position.distance(to: end) - 2 < boundary.count {
 								// we are at the eol, but check to see if the next line may be starting a boundary
 								if position.distance(to: end) < 4 || (byts[position.advanced(by: 2)] == mime_dash && byts[position.advanced(by: 3)] == mime_dash) {
@@ -316,36 +301,27 @@ public final class MimeReader {
 							
 						}
 					}
-					
 					spec.fieldValueTempBytes!.append(byts[position])
 					position = position.advanced(by: 1)
 				}
-				
 			case .stateFile:
-				
 				let spec = bodySpecs.last!
 				while position != end {
 					if byts[position] == mime_cr {
-						
 						if position.distance(to: end) == 1 {
 							buffer = Array(byts[position..<end])
 							clearBuffer = false
 							position = end
 							continue
 						}
-						
 						if byts[position.advanced(by: 1)] == mime_lf {
-							
 							if isBoundaryStart(bytes: byts, start: position.advanced(by: 2)) {
-								
 								position = position.advanced(by: 2)
 								state = .stateBoundary
-								
 								// end of file data
 								spec.file!.close()
 								chmod(spec.file!.path, mode_t(S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH))
 								break
-								
 							} else if position.distance(to: end) - 2 < boundary.count {
 								// we are at the eol, but check to see if the next line may be starting a boundary
 								if position.distance(to: end) < 4 || (byts[position.advanced(by: 2)] == mime_dash && byts[position.advanced(by: 3)] == mime_dash) {
@@ -361,7 +337,6 @@ public final class MimeReader {
 					var writeEnd = position
 					let qPtr = UnsafePointer<UInt8>(byts)
 					while writeEnd < end {
-						
 						if qPtr[writeEnd] == mime_cr {
 							if end - writeEnd < 2 {
 								break
@@ -377,7 +352,6 @@ public final class MimeReader {
 								}
 							}
 						}
-						
 						writeEnd += 1
 					}
 					do {
@@ -388,7 +362,6 @@ public final class MimeReader {
 						state = .stateNone
 						break
 					}
-					
 					if (writeEnd == end) {
 						buffer.removeAll()
 					}
@@ -397,7 +370,6 @@ public final class MimeReader {
 				}
 			}
 		}
-		
 		if clearBuffer {
 			buffer.removeAll()
 		}

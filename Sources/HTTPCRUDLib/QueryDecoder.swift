@@ -13,8 +13,7 @@ private let eqChar = "=".utf8.first!
 private extension String {
 	init?(_ slice: ArraySlice<UInt8>) {
 		var s = slice
-		let d = Data(bytesNoCopy: &s, count: slice.count, deallocator: .none)
-		self.init(data: d, encoding: .utf8)
+		self.init(bytesNoCopy: &s, length: slice.count, encoding: .utf8, freeWhenDone: false)
 	}
 }
 
