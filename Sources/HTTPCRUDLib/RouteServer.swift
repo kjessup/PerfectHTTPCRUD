@@ -148,9 +148,10 @@ class NIOBoundRoutes: BoundRoutes {
 		channel = try bs
 			.childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
 			.childChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
+			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 2)
 			.childChannelOption(ChannelOptions.autoRead, value: true)
 			.childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
+			.childChannelOption(ChannelOptions.recvAllocator, value: AdaptiveRecvByteBufferAllocator(minimum: 1024, initial: 4096, maximum: 65536))
 			.childChannelInitializer {
 				channel in
 				configureHTTPServerPipeline(pipeline: channel.pipeline)
@@ -191,7 +192,7 @@ class NIOListeningRoutes: ListeningRoutes {
 	init(channel: Channel) {
 		_ = NIOListeningRoutes.globalInitialized
 		self.channel = channel
-		channel.read()
+//		channel.read()
 		f = channel.closeFuture
 	}
 	public func stop() {

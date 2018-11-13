@@ -38,7 +38,7 @@ import PerfectCRUD
 //}
 
 final class HTTPCRUDLibTests: XCTestCase {
-	func testScratch0() {
+	func testQueryDecoder() {
 		let q = QueryDecoder(Array("a=1&b=2&c=3&d=4&b=5&e&f=&g=1234567890&h".utf8))
 		
 		XCTAssertEqual(q["not"], [])
@@ -54,6 +54,39 @@ final class HTTPCRUDLibTests: XCTestCase {
 		print("\(q.lookup)")
 		print("\(q.ranges)")
 	}
+	func testQueryDecoderSpeed() {
+		func printTupes(_ t: QueryDecoder) {
+			for c in "abcdefghijklmnopqrstuvwxyz" {
+				let key = "abc" + String(c)
+				let _ = t.get(key)
+				//				print(fnd)
+			}
+		}
+		let body = Array("abca=abcdefghijklmnopqrstuvwxyz&abcb=abcdefghijklmnopqrstuvwxyz&abcc=abcdefghijklmnopqrstuvwxyz&abcd=abcdefghijklmnopqrstuvwxyz&abce=abcdefghijklmnopqrstuvwxyz&abcf=abcdefghijklmnopqrstuvwxyz&abcg=abcdefghijklmnopqrstuvwxyz&abch=abcdefghijklmnopqrstuvwxyz&abci=abcdefghijklmnopqrstuvwxyz&abcj=abcdefghijklmnopqrstuvwxyz&abck=abcdefghijklmnopqrstuvwxyz&abcl=abcdefghijklmnopqrstuvwxyz&abcm=abcdefghijklmnopqrstuvwxyz&abcn=abcdefghijklmnopqrstuvwxyz&abco=abcdefghijklmnopqrstuvwxyz&abcp=abcdefghijklmnopqrstuvwxyz&abcq=abcdefghijklmnopqrstuvwxyz&abca=abcdefghijklmnopqrstuvwxyz&abcs=abcdefghijklmnopqrstuvwxyz&abct=abcdefghijklmnopqrstuvwxyz&abcu=abcdefghijklmnopqrstuvwxyz&abcv=abcdefghijklmnopqrstuvwxyz&abcw=abcdefghijklmnopqrstuvwxyz&abcx=abcdefghijklmnopqrstuvwxyz&abcy=abcdefghijklmnopqrstuvwxyz&abcz=abcdefghijklmnopqrstuvwxyz".utf8)
+		self.measure {
+			for _ in 0..<20000 {
+				let q = QueryDecoder(body)
+				printTupes(q)
+			}
+		}
+	}
+	func testStringDecodeSpeed() {
+		func printTupes(_ t: [(String,String)]) {
+			for c in "abcdefghijklmnopqrstuvwxyz" {
+				let key = "abc" + String(c)
+				let _ = t.first { $0.0 == key }
+				//				print(fnd)
+			}
+		}
+		let body = "abca=abcdefghijklmnopqrstuvwxyz&abcb=abcdefghijklmnopqrstuvwxyz&abcc=abcdefghijklmnopqrstuvwxyz&abcd=abcdefghijklmnopqrstuvwxyz&abce=abcdefghijklmnopqrstuvwxyz&abcf=abcdefghijklmnopqrstuvwxyz&abcg=abcdefghijklmnopqrstuvwxyz&abch=abcdefghijklmnopqrstuvwxyz&abci=abcdefghijklmnopqrstuvwxyz&abcj=abcdefghijklmnopqrstuvwxyz&abck=abcdefghijklmnopqrstuvwxyz&abcl=abcdefghijklmnopqrstuvwxyz&abcm=abcdefghijklmnopqrstuvwxyz&abcn=abcdefghijklmnopqrstuvwxyz&abco=abcdefghijklmnopqrstuvwxyz&abcp=abcdefghijklmnopqrstuvwxyz&abcq=abcdefghijklmnopqrstuvwxyz&abca=abcdefghijklmnopqrstuvwxyz&abcs=abcdefghijklmnopqrstuvwxyz&abct=abcdefghijklmnopqrstuvwxyz&abcu=abcdefghijklmnopqrstuvwxyz&abcv=abcdefghijklmnopqrstuvwxyz&abcw=abcdefghijklmnopqrstuvwxyz&abcx=abcdefghijklmnopqrstuvwxyz&abcy=abcdefghijklmnopqrstuvwxyz&abcz=abcdefghijklmnopqrstuvwxyz"
+		self.measure {
+			for _ in 0..<20000 {
+				let q = body.decodedQuery
+				printTupes(q)
+			}
+		}
+	}
+	
     func testScratch() {
 		let uris = ["/v1/device/register",
 					"/v1/device/unregister",

@@ -8,6 +8,8 @@
 import NIO
 import NIOHTTP1
 
+//let foreignIO = BlockingIOThreadPool(numberOfThreads: )
+
 public extension Routes {
 	func async<NewOut>(_ call: @escaping (OutType, EventLoopPromise<NewOut>) -> ()) -> Routes<InType, NewOut> {
 		return applyFuncs {
@@ -56,8 +58,15 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	init(finder: RouteFinder) {
 		self.finder = finder
 	}
+	func consumeContent() -> [ByteBuffer] {
+		let cpy = pendingBytes
+		pendingBytes = []
+		let sum = cpy.reduce(0) { $0 + $1.readableBytes }
+		contentConsumed += sum
+		return cpy
+	}
 	func readSomeContent() -> EventLoopFuture<[ByteBuffer]> {
-		assert(nil != self.channel)
+		precondition(nil != self.channel)
 		let channel = self.channel!
 		let promise: EventLoopPromise<[ByteBuffer]> = channel.eventLoop.newPromise()
 		readSomeContent(promise)
@@ -67,12 +76,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		guard contentConsumed < contentLength else {
 			return promise.succeed(result: [])
 		}
-		if !pendingBytes.isEmpty {
-			let cpy = pendingBytes
-			pendingBytes = []
-			let sum = cpy.reduce(0) { $0 + $1.readableBytes }
-			contentConsumed += sum
-			return promise.succeed(result: cpy)
+		let content = consumeContent()
+		if !content.isEmpty {
+			return promise.succeed(result: content)
 		}
 		pendingPromise = promise
 //		channel?.read()
@@ -85,7 +91,6 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		let ret: EventLoopFuture<HTTPRequestContentType>
 		let ct = contentType ?? "application/octet-stream"
 		if ct.hasPrefix("multipart/form-data") {
-			//application/x-www-form-urlencoded or multipart/form-data
 			let p: EventLoopPromise<HTTPRequestContentType> = channel!.eventLoop.newPromise()
 			readContent(multi: MimeReader(ct), p)
 			ret = p.futureResult
@@ -104,6 +109,12 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	}
 	
 	func readContent(multi: MimeReader, _ promise: EventLoopPromise<HTTPRequestContentType>) {
+//		print("\(contentLength) \(contentRead) \(contentConsumed)")
+		if contentConsumed == 0 && contentRead == contentLength {
+			consumeContent().forEach {
+				multi.addToBuffer(bytes: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+			}
+		}
 		if contentConsumed == contentLength {
 			return promise.succeed(result: .multiPartForm(multi))
 		}
@@ -117,6 +128,14 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	}
 	
 	func readContent(_ promise: EventLoopPromise<[UInt8]>) {
+		// fast track
+		if contentRead == contentLength {
+			var a: [UInt8] = []
+			consumeContent().forEach {
+				a.append(contentsOf: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+			}
+			return promise.succeed(result: a)
+		}
 		readContent(accum: [], promise)
 	}
 	

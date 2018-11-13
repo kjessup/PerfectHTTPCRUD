@@ -12,7 +12,9 @@ private let eqChar = "=".utf8.first!
 
 private extension String {
 	init?(_ slice: ArraySlice<UInt8>) {
-		self.init(validatingUTF8: Array(slice))
+		var s = slice
+		let d = Data(bytesNoCopy: &s, count: slice.count, deallocator: .none)
+		self.init(data: d, encoding: .utf8)
 	}
 }
 
@@ -114,27 +116,24 @@ public struct QueryDecoder {
 			if c == ampChar {
 				s += 1
 			}
-			ranges.append(RangeTriple(start: startI, middle: middleI, end: endI))
-		}
-		buildLookup()
-	}
-	mutating func buildLookup() {
-		lookup = [:]
-		for i in 0..<ranges.count {
-			let triple = ranges[i]
-			let nameSlice: ArraySlice<UInt8>
-			if triple.middle == collection.endIndex {
-				nameSlice = collection[triple.start...]
-			} else if collection[triple.middle - 1] != eqChar {
-				nameSlice = collection[triple.start..<triple.middle]
-			} else {
-				nameSlice = collection[triple.start..<triple.middle-1]
-			}
-			if let s = String(nameSlice) {
-				if let fnd = lookup[s] {
-					lookup[s] = fnd + [i]
+			let triple = RangeTriple(start: startI, middle: middleI, end: endI)
+			let i = ranges.count
+			ranges.append(triple)
+			do {
+				let nameSlice: ArraySlice<UInt8>
+				if triple.middle == collection.endIndex {
+					nameSlice = collection[triple.start...]
+				} else if collection[triple.middle - 1] != eqChar {
+					nameSlice = collection[triple.start..<triple.middle]
 				} else {
-					lookup[s] = [i]
+					nameSlice = collection[triple.start..<triple.middle-1]
+				}
+				if let s = String(nameSlice) {
+					if let fnd = lookup[s] {
+						lookup[s] = fnd + [i]
+					} else {
+						lookup[s] = [i]
+					}
 				}
 			}
 		}
