@@ -109,10 +109,15 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	}
 	
 	func readContent(multi: MimeReader, _ promise: EventLoopPromise<HTTPRequestContentType>) {
-//		print("\(contentLength) \(contentRead) \(contentConsumed)")
 		if contentConsumed == 0 && contentRead == contentLength {
 			consumeContent().forEach {
-				multi.addToBuffer(bytes: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+				let cnt = $0.readableBytes
+				var a = Array<UInt8>(repeating: 0, count: cnt)
+				$0.withVeryUnsafeBytes {
+					_ = memcpy(&a, $0.baseAddress, cnt)
+				}
+//				let a = $0.getBytes(at: 0, length: $0.readableBytes) ?? []
+				multi.addToBuffer(bytes: a)
 			}
 		}
 		if contentConsumed == contentLength {
@@ -121,7 +126,13 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		readSomeContent().whenSuccess {
 			buffers in
 			buffers.forEach {
-				multi.addToBuffer(bytes: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+				let cnt = $0.readableBytes
+				var a = Array<UInt8>(repeating: 0, count: cnt)
+				$0.withVeryUnsafeBytes {
+					_ = memcpy(&a, $0.baseAddress, cnt)
+				}
+//				let a = $0.getBytes(at: 0, length: $0.readableBytes) ?? []
+				multi.addToBuffer(bytes: a)
 			}
 			self.readContent(multi: multi, promise)
 		}
