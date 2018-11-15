@@ -10,7 +10,7 @@ import NIO
 struct ByteBufferCollection {
 	let buffers: [ByteBuffer]
 	let offset: Int // explicit offset into bytes
-	init(buffers: [ByteBuffer], offset: Int = 0) {
+	init(buffers: [ByteBuffer] = [], offset: Int = 0) {
 		self.buffers = buffers
 		self.offset = offset
 	}
@@ -22,6 +22,34 @@ struct ByteBufferCollection {
 			return 0
 		}
 		return buffers[blockIndex].getInteger(at: indexIndex) ?? 0
+	}
+	func withRange<T>(_ range: PartialRangeFrom<Int>, _ call: (UnsafeMutableRawPointer) throws -> T) rethrows -> T? {
+		return try withRange(range.lowerBound..<count, call)
+	}
+	func withRange<T>(_ range: Range<Int>, _ call: (UnsafeMutableRawPointer) throws -> T) rethrows -> T? {
+		let start = range.startIndex
+		guard let (blockIdx, index) = bufferIndex(containing: start) else {
+			return nil
+		}
+		var block = buffers[blockIdx]
+		let readable = block.readableBytes
+		if readable - index >= range.count {
+			return try block.withUnsafeMutableReadableBytes {
+				p in
+				return try call(p.baseAddress! + index)
+			}
+		}
+		var accum = block.getBytes(at: index, length: readable - index) ?? []
+		var remaining = readable - index
+		var bIdx = blockIdx
+		while remaining < 0 {
+			bIdx += 1
+			let nextBlock = buffers[bIdx]
+			let thisRead = min(nextBlock.readableBytes, remaining)
+			accum.append(contentsOf: nextBlock.getBytes(at: 0, length: thisRead) ?? [])
+			remaining -= thisRead
+		}
+		return try call(&accum)
 	}
 	private func bufferIndex(containing index: Int) -> (block: Int, index: Int)? {
 		let index = index + offset

@@ -122,16 +122,17 @@ func configureHTTPServerPipeline(pipeline: ChannelPipeline,
 class NIOBoundRoutes: BoundRoutes {
 	typealias RegistryType = Routes<HTTPRequest, HTTPOutput>
 	private let childGroup: EventLoopGroup
-	let acceptGroup: MultiThreadedEventLoopGroup
+	let acceptGroup: EventLoopGroup
 	private let channel: Channel
 	public let port: Int
 	public let address: String
 	init(registry: RegistryType,
 		 port: Int,
 		 address: String,
-		 threadGroup: EventLoopGroup?
+		 acceptGroup ag: EventLoopGroup,
+		 threadGroup: EventLoopGroup?,
+		 reusePort: Bool = false
 		) throws {
-		let ag = MultiThreadedEventLoopGroup(numberOfThreads: 1)
 		acceptGroup = ag
 		childGroup = threadGroup ?? ag
 		let finder = try RouteFinderDual(registry)
@@ -142,7 +143,7 @@ class NIOBoundRoutes: BoundRoutes {
 			.serverChannelOption(ChannelOptions.backlog, value: 256)
 			.serverChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
 			.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-		if threadGroup == nil {
+		if reusePort {
 			bs = bs.serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEPORT), value: 1)
 		}
 		channel = try bs
@@ -211,7 +212,8 @@ public extension Routes where InType == HTTPRequest, OutType == HTTPOutput {
 		return try NIOBoundRoutes(registry: self,
 								  port: port,
 								  address: address,
-								  threadGroup: MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount))
+								  acceptGroup: MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount),
+								  threadGroup: nil)
 	}
 	func bind(count: Int, port: Int, address: String = "0.0.0.0") throws -> [BoundRoutes] {
 		if count == 1 {
@@ -221,7 +223,9 @@ public extension Routes where InType == HTTPRequest, OutType == HTTPOutput {
 			return try NIOBoundRoutes(registry: self,
 									  port: port,
 									  address: address,
-									  threadGroup: nil)
+									  acceptGroup: MultiThreadedEventLoopGroup(numberOfThreads: 1),
+									  threadGroup: nil,
+									  reusePort: true)
 		}
 	}
 }
