@@ -114,7 +114,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 				let cnt = $0.readableBytes
 				var a = Array<UInt8>(repeating: 0, count: cnt)
 				$0.withVeryUnsafeBytes {
-					_ = memcpy(&a, $0.baseAddress, cnt)
+					_ = memcpy(&a, $0.baseAddress!, cnt)
 				}
 //				let a = $0.getBytes(at: 0, length: $0.readableBytes) ?? []
 				multi.addToBuffer(bytes: a)
@@ -129,7 +129,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 				let cnt = $0.readableBytes
 				var a = Array<UInt8>(repeating: 0, count: cnt)
 				$0.withVeryUnsafeBytes {
-					_ = memcpy(&a, $0.baseAddress, cnt)
+					_ = memcpy(&a, $0.baseAddress!, cnt)
 				}
 //				let a = $0.getBytes(at: 0, length: $0.readableBytes) ?? []
 				multi.addToBuffer(bytes: a)
