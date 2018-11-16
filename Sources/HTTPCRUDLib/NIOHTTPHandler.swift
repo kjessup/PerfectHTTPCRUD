@@ -8,21 +8,19 @@
 import NIO
 import NIOHTTP1
 
-//let foreignIO = BlockingIOThreadPool(numberOfThreads: )
-
-func timeit<T>(name: String, _ call: () -> T) -> T {
-	var tvalBefore = timeval()
-	gettimeofday(&tvalBefore, nil)
-	
-	let a = call()
-	
-	var tvalAfter = timeval()
-	gettimeofday(&tvalAfter, nil)
-	let diff = (Int(tvalAfter.tv_sec - tvalBefore.tv_sec) * 1000000 + Int(tvalAfter.tv_usec)) - Int(tvalBefore.tv_usec)
-	print("\(name) timed \(diff)")
-	
-	return a
-}
+//func timeit<T>(name: String, _ call: () -> T) -> T {
+//	var tvalBefore = timeval()
+//	gettimeofday(&tvalBefore, nil)
+//
+//	let a = call()
+//
+//	var tvalAfter = timeval()
+//	gettimeofday(&tvalAfter, nil)
+//	let diff = (Int(tvalAfter.tv_sec - tvalBefore.tv_sec) * 1000000 + Int(tvalAfter.tv_usec)) - Int(tvalBefore.tv_usec)
+//	print("\(name) timed \(diff)")
+//
+//	return a
+//}
 
 public extension Routes {
 	func async<NewOut>(_ call: @escaping (OutType, EventLoopPromise<NewOut>) -> ()) -> Routes<InType, NewOut> {
@@ -126,8 +124,8 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		if contentConsumed < contentRead {
 			consumeContent().forEach {
 				p in
-				let a = timeit(name: "fast path") { p.getBytes(at: 0, length: p.readableBytes) }
-				timeit(name: "addToBuffer1") { multi.addToBuffer(bytes: a ?? []) }
+				let a = p.getBytes(at: 0, length: p.readableBytes)
+				multi.addToBuffer(bytes: a ?? [])
 			}
 		}
 		if contentConsumed == contentLength {
@@ -137,8 +135,8 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			buffers in
 			buffers.forEach {
 				p in
-				let a = timeit(name: "readSomeContent") { p.getBytes(at: 0, length: p.readableBytes) }
-				timeit(name: "addToBuffer2") { multi.addToBuffer(bytes: a ?? []) }
+				let a = p.getBytes(at: 0, length: p.readableBytes)
+				multi.addToBuffer(bytes: a ?? [])
 			}
 			self.readContent(multi: multi, promise)
 		}
