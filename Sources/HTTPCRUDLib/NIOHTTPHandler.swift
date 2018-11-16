@@ -10,6 +10,20 @@ import NIOHTTP1
 
 //let foreignIO = BlockingIOThreadPool(numberOfThreads: )
 
+func timeit<T>(name: String, _ call: () -> T) -> T {
+	var tvalBefore = timeval()
+	gettimeofday(&tvalBefore, nil)
+	
+	let a = call()
+	
+	var tvalAfter = timeval()
+	gettimeofday(&tvalAfter, nil)
+	let diff = (Int(tvalAfter.tv_sec - tvalBefore.tv_sec) * 1000000 + Int(tvalAfter.tv_usec)) - Int(tvalBefore.tv_usec)
+	print("\(name) timed \(diff)")
+	
+	return a
+}
+
 public extension Routes {
 	func async<NewOut>(_ call: @escaping (OutType, EventLoopPromise<NewOut>) -> ()) -> Routes<InType, NewOut> {
 		return applyFuncs {
@@ -111,18 +125,20 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	func readContent(multi: MimeReader, _ promise: EventLoopPromise<HTTPRequestContentType>) {
 		if contentConsumed < contentRead {
 			consumeContent().forEach {
-				multi.addToBuffer(bytes: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+				p in
+				let a = timeit(name: "fast path") { p.getBytes(at: 0, length: p.readableBytes) }
+				multi.addToBuffer(bytes: a ?? [])
 			}
 		}
 		if contentConsumed == contentLength {
-//			print("fast \(contentConsumed)")
 			return promise.succeed(result: .multiPartForm(multi))
 		}
-//		print("fast \(contentConsumed)")
 		readSomeContent().whenSuccess {
 			buffers in
 			buffers.forEach {
-				multi.addToBuffer(bytes: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+				p in
+				let a = timeit(name: "readSomeContent") { p.getBytes(at: 0, length: p.readableBytes) }
+				multi.addToBuffer(bytes: a ?? [])
 			}
 			self.readContent(multi: multi, promise)
 		}
