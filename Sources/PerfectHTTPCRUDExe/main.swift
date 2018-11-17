@@ -47,7 +47,10 @@ let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
 //					//					print(fnd)
 //				}
 //			}
-			_, _ in
+			if case .urlForm(let params) = $1 {
+				printTupes(params)
+			}
+			
 			return big2048
 		},
 	]}
