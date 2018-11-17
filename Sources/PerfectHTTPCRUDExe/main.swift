@@ -40,13 +40,13 @@ let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
 			return big2048
 		},
 		$0.postArgsMulti2048.readBody {
-			if case .multiPartForm(let reader) = $1 {
-				for c in "abcdefghijklmnopqrstuvwxyz" {
-					let key = prefix + String(c)
-					let _ = reader.bodySpecs.first { $0.fieldName == key }.map { $0.fieldValue }
-					//					print(fnd)
-				}
-			}
+//			if case .multiPartForm(let reader) = $1 {
+//				for c in "abcdefghijklmnopqrstuvwxyz" {
+//					let key = prefix + String(c)
+//					let _ = reader.bodySpecs.first { $0.fieldName == key }.map { $0.fieldValue }
+//					//					print(fnd)
+//				}
+//			}
 			return big2048
 		},
 	]}
