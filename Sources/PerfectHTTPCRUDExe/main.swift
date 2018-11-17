@@ -33,6 +33,12 @@ let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
 		return big2048
 	},
 	$0.POST.dir{[
+		$0.postArgs2048.readBody {
+			if case .urlForm(let params) = $1 {
+				printTupes(params)
+			}
+			return big2048
+		},
 		$0.postArgsMulti2048.readBody {
 			if case .multiPartForm(let reader) = $1 {
 				for c in "abcdefghijklmnopqrstuvwxyz" {
@@ -40,12 +46,6 @@ let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
 					let _ = reader.bodySpecs.first { $0.fieldName == key }.map { $0.fieldValue }
 					//					print(fnd)
 				}
-			}
-			return big2048
-		},
-		$0.postArgs2048.readBody {
-			if case .urlForm(let params) = $1 {
-				printTupes(params)
 			}
 			return big2048
 		},

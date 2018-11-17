@@ -242,7 +242,7 @@ public final class MimeReader {
 					if eolPos != position {
 						let check = isField(name: kContentDisposition, bytes: byts, start: position)
 						if check != end { // yes, content-disposition
-							var lineRange = byts[check.advanced(by: 2)..<eolPos]
+							var lineRange = Array(byts[check.advanced(by: 2)..<eolPos])
 							let line = String(bytesNoCopy: &lineRange, length: lineRange.count, encoding: .utf8, freeWhenDone: false) ?? ""
 							let name = pullValue(name: "name", from: line)
 							let fileName = pullValue(name: "filename", from: line)
@@ -251,7 +251,7 @@ public final class MimeReader {
 						} else {
 							let check = isField(name: kContentType, bytes: byts, start: position)
 							if check != end { // yes, content-type
-								var lineRange = byts[check.advanced(by: 2)..<eolPos]
+								var lineRange = Array(byts[check.advanced(by: 2)..<eolPos])
 								let line = String(bytesNoCopy: &lineRange, length: lineRange.count, encoding: .utf8, freeWhenDone: false) ?? ""
 								spec.contentType = line
 								
