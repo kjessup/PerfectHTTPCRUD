@@ -93,7 +93,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			return promise.succeed(result: content)
 		}
 		pendingPromise = promise
-//		channel?.read() // no change
+//		channel?.read()
 	}
 	// content can only be read once
 	func readContent() -> EventLoopFuture<HTTPRequestContentType> {
@@ -227,7 +227,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		}
 		contentType = head.headers["content-type"].first
 		contentLength = Int(head.headers["content-length"].first ?? "0") ?? 0
-		contentRead = 0
+//		if contentLength > 0 {
+//			channel?.read()
+//		}
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {
 		let onlyHead = readState == .head
@@ -235,8 +237,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		readState = .body
 		let readable = body.readableBytes
 		if contentRead + readable > contentLength {
+			// should this close the invalid request?
+			// or does NIO take care of this case?
 			let diff = contentLength - contentRead
-			print("too much data by \(contentRead + readable - contentLength) bytes. slicing \(diff)")
 			if diff > 0, let s = body.getSlice(at: 0, length: diff) {
 				pendingBytes.append(s)
 			}
@@ -245,12 +248,12 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			contentRead += readable
 			pendingBytes.append(body)
 		}
-		if let p = pendingPromise {
-			pendingPromise = nil
-			readSomeContent(p)
-		}
 		if contentRead == contentLength {
 			readState = .end
+		}
+		if let p = pendingPromise {
+			pendingPromise = nil
+			p.succeed(result: consumeContent())
 		}
 		if onlyHead {
 			runRequest()
@@ -323,7 +326,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			reset()
 			channel.writeAndFlush(wrapOutboundOut(.end(nil)), promise: p)
 			if keepAlive {
-//				channel.read()
+				channel.read()
 			}
 		}
 	}
