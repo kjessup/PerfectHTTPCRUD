@@ -126,9 +126,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 //				multi.addToBuffer(bytes: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
 //			}
 //		}
-//		if contentConsumed == contentLength {
-//			return promise.succeed(result: .multiPartForm(multi))
-//		}
+		if contentConsumed == contentLength {
+			return promise.succeed(result: .multiPartForm(multi))
+		}
 		readSomeContent().whenSuccess {
 			buffers in
 			buffers.forEach {
