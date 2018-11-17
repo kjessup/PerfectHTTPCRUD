@@ -125,7 +125,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			consumeContent().forEach {
 				p in
 				let a = p.getBytes(at: 0, length: p.readableBytes)
-				multi.addToBuffer(bytes: a ?? [])
+//				multi.addToBuffer(bytes: a ?? [])
 			}
 		}
 		if contentConsumed == contentLength {
@@ -136,7 +136,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			buffers.forEach {
 				p in
 				let a = p.getBytes(at: 0, length: p.readableBytes)
-				multi.addToBuffer(bytes: a ?? [])
+//				multi.addToBuffer(bytes: a ?? [])
 			}
 			self.readContent(multi: multi, promise)
 		}
