@@ -93,7 +93,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			return promise.succeed(result: content)
 		}
 		pendingPromise = promise
-//		channel?.read()
+		channel?.read()
 	}
 	// content can only be read once
 	func readContent() -> EventLoopFuture<HTTPRequestContentType> {
@@ -105,7 +105,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		if ct.hasPrefix("multipart/form-data") {
 			let p: EventLoopPromise<[UInt8]> = channel!.eventLoop.newPromise()
 			readContent(p)
-			ret = p.futureResult.map { _ in .none }
+			ret = p.futureResult.map { .other($0) }
 			
 //			let p: EventLoopPromise<HTTPRequestContentType> = channel!.eventLoop.newPromise()
 //			readContent(multi: MimeReader(ct), p)
