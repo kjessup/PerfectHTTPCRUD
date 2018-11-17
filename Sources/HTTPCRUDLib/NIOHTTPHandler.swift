@@ -106,7 +106,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			//let p: EventLoopPromise<HTTPRequestContentType> = channel!.eventLoop.newPromise()
 			//readContent(multi: MimeReader(ct), p)
 			//ret = p.futureResult
-			ret = channel!.eventLoop.newSucceededFuture(result: .none)
+			let p: EventLoopPromise<[UInt8]> = channel!.eventLoop.newPromise()
+			readContent(p)
+			ret = p.futureResult.map { .other($0) }
 		} else {
 			let p: EventLoopPromise<[UInt8]> = channel!.eventLoop.newPromise()
 			readContent(p)
