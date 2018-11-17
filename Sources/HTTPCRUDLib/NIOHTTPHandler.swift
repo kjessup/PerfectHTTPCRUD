@@ -103,9 +103,10 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		let ret: EventLoopFuture<HTTPRequestContentType>
 		let ct = contentType ?? "application/octet-stream"
 		if ct.hasPrefix("multipart/form-data") {
-			let p: EventLoopPromise<HTTPRequestContentType> = channel!.eventLoop.newPromise()
-			readContent(multi: MimeReader(ct), p)
-			ret = p.futureResult
+			ret = channel!.eventLoop.newSucceededFuture(result: .none)
+//			let p: EventLoopPromise<HTTPRequestContentType> = channel!.eventLoop.newPromise()
+//			readContent(multi: MimeReader(ct), p)
+//			ret = p.futureResult
 		} else {
 			let p: EventLoopPromise<[UInt8]> = channel!.eventLoop.newPromise()
 			readContent(p)
