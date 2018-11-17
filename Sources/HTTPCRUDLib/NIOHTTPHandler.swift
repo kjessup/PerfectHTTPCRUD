@@ -93,7 +93,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			return promise.succeed(result: content)
 		}
 		pendingPromise = promise
-		channel?.read()
+//		channel?.read() // no change
 	}
 	// content can only be read once
 	func readContent() -> EventLoopFuture<HTTPRequestContentType> {
@@ -103,13 +103,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		let ret: EventLoopFuture<HTTPRequestContentType>
 		let ct = contentType ?? "application/octet-stream"
 		if ct.hasPrefix("multipart/form-data") {
-			let p: EventLoopPromise<[UInt8]> = channel!.eventLoop.newPromise()
-			readContent(p)
-			ret = p.futureResult.map { .other($0) }
-			
-//			let p: EventLoopPromise<HTTPRequestContentType> = channel!.eventLoop.newPromise()
-//			readContent(multi: MimeReader(ct), p)
-//			ret = p.futureResult
+			let p: EventLoopPromise<HTTPRequestContentType> = channel!.eventLoop.newPromise()
+			readContent(multi: MimeReader(ct), p)
+			ret = p.futureResult
 		} else {
 			let p: EventLoopPromise<[UInt8]> = channel!.eventLoop.newPromise()
 			readContent(p)
@@ -125,14 +121,14 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	}
 	
 	func readContent(multi: MimeReader, _ promise: EventLoopPromise<HTTPRequestContentType>) {
-		if contentConsumed < contentRead {
-			consumeContent().forEach {
-				multi.addToBuffer(bytes: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
-			}
-		}
-		if contentConsumed == contentLength {
-			return promise.succeed(result: .multiPartForm(multi))
-		}
+//		if contentConsumed < contentRead {
+//			consumeContent().forEach {
+//				multi.addToBuffer(bytes: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+//			}
+//		}
+//		if contentConsumed == contentLength {
+//			return promise.succeed(result: .multiPartForm(multi))
+//		}
 		readSomeContent().whenSuccess {
 			buffers in
 			buffers.forEach {
@@ -144,13 +140,13 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	
 	func readContent(_ promise: EventLoopPromise<[UInt8]>) {
 		// fast track
-		if contentRead == contentLength {
-			var a: [UInt8] = []
-			consumeContent().forEach {
-				a.append(contentsOf: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
-			}
-			return promise.succeed(result: a)
-		}
+//		if contentRead == contentLength {
+//			var a: [UInt8] = []
+//			consumeContent().forEach {
+//				a.append(contentsOf: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+//			}
+//			return promise.succeed(result: a)
+//		}
 		readContent(accum: [], promise)
 	}
 	
@@ -240,6 +236,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		let readable = body.readableBytes
 		if contentRead + readable > contentLength {
 			let diff = contentLength - contentRead
+			print("too much data by \(contentRead + readable - contentLength) bytes. slicing \(diff)")
 			if diff > 0, let s = body.getSlice(at: 0, length: diff) {
 				pendingBytes.append(s)
 			}
