@@ -230,7 +230,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		}
 		if let p = pendingPromise {
 			pendingPromise = nil
-			readSomeContent(p)
+			p.succeed(result: consumeContent())
 		}
 		if contentRead == contentLength {
 			readState = .end
