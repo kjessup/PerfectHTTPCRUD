@@ -121,11 +121,11 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	}
 	
 	func readContent(multi: MimeReader, _ promise: EventLoopPromise<HTTPRequestContentType>) {
-//		if contentConsumed < contentRead {
-//			consumeContent().forEach {
-//				multi.addToBuffer(bytes: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
-//			}
-//		}
+		if contentConsumed < contentRead {
+			consumeContent().forEach {
+				multi.addToBuffer(bytes: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+			}
+		}
 		if contentConsumed == contentLength {
 			return promise.succeed(result: .multiPartForm(multi))
 		}
@@ -140,13 +140,13 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	
 	func readContent(_ promise: EventLoopPromise<[UInt8]>) {
 		// fast track
-//		if contentRead == contentLength {
-//			var a: [UInt8] = []
-//			consumeContent().forEach {
-//				a.append(contentsOf: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
-//			}
-//			return promise.succeed(result: a)
-//		}
+		if contentRead == contentLength {
+			var a: [UInt8] = []
+			consumeContent().forEach {
+				a.append(contentsOf: $0.getBytes(at: 0, length: $0.readableBytes) ?? [])
+			}
+			return promise.succeed(result: a)
+		}
 		readContent(accum: [], promise)
 	}
 	
