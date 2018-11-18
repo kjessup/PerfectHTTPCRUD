@@ -149,7 +149,7 @@ class NIOBoundRoutes: BoundRoutes {
 			.childChannelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
 			.childChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
 			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
-			.childChannelOption(ChannelOptions.autoRead, value: false)
+			.childChannelOption(ChannelOptions.autoRead, value: true)
 			.childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
 			.childChannelOption(ChannelOptions.recvAllocator, value:FixedSizeRecvByteBufferAllocator(capacity: 1024*16))
 				//AdaptiveRecvByteBufferAllocator(minimum: 1024, initial: 4096, maximum: 65536))

@@ -93,7 +93,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			return promise.succeed(result: content)
 		}
 		pendingPromise = promise
-		channel?.read()
+//		channel?.read()
 	}
 	// content can only be read once
 	func readContent() -> EventLoopFuture<HTTPRequestContentType> {
@@ -171,7 +171,7 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 	}
 	func channelActive(ctx: ChannelHandlerContext) {
 		channel = ctx.channel
-		channel?.read()
+//		channel?.read()
 	}
 	func channelInactive(ctx: ChannelHandlerContext) {
 		return
@@ -227,9 +227,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 		}
 		contentType = head.headers["content-type"].first
 		contentLength = Int(head.headers["content-length"].first ?? "0") ?? 0
-		if contentLength > 0 {
-			channel?.read()
-		}
+//		if contentLength > 0 {
+//			channel?.read()
+//		}
 	}
 	func http(body: ByteBuffer, ctx: ChannelHandlerContext) {
 		let onlyHead = readState == .head
@@ -325,9 +325,9 @@ final class NIOHTTPHandler: ChannelInboundHandler, HTTPRequest {
 			}
 			reset()
 			channel.writeAndFlush(wrapOutboundOut(.end(nil)), promise: p)
-			if keepAlive {
-				channel.read()
-			}
+//			if keepAlive {
+//				channel.read()
+//			}
 		}
 	}
 	
