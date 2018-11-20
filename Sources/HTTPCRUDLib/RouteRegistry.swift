@@ -330,26 +330,24 @@ public extension Routes {
 	/// The caller can inspect the given input value and choose to return an HTTP error code.
 	/// If any code outside of 200..<300 is return the request is aborted.
 	func statusCheck(_ handler: @escaping (OutType) throws -> HTTPResponseStatus) -> Routes<InType, OutType> {
-		return map {
-			switch try handler($0).code {
-			case 200..<300:
-				return $0
-			default:
-				throw TerminationType.criteriaFailed
+		return applyFuncs {
+			$0.thenThrowing {
+				box in
+				let status = try handler(box.value)
+				box.state.response.status = status
+				switch status.code {
+				case 200..<300:
+					return box
+				default:
+					throw TerminationType.criteriaFailed
+				}
 			}
 		}
 	}
 	/// The caller can choose to return an HTTP error code.
 	/// If any code outside of 200..<300 is return the request is aborted.
 	func statusCheck(_ handler: @escaping () throws -> HTTPResponseStatus) -> Routes<InType, OutType> {
-		return map {
-			switch try handler().code {
-			case 200..<300:
-				return $0
-			default:
-				throw TerminationType.criteriaFailed
-			}
-		}
+		return statusCheck { _ in try handler() }
 	}
 	/// Read the client content body and then attempt to decode it as the indicated `Decodable` type.
 	/// Both the original input value and the newly decoded object are delivered to the provided function.
@@ -376,6 +374,9 @@ public extension Routes {
 public extension Routes {
 	/// Append new routes to the set given a new output type and a function which receives a route object and returns an array of new routes.
 	/// This permits a sort of shorthand for adding new routes.
+	/// At times, Swift's type inference can fail to discern what the programmer intends when calling functions like this.
+	/// Calling the second version of this method, the one accepting a `type: NewOut.Type` as the first parameter,
+	/// can often clarify your intentions to the compiler. If you experience a compilation error with this function, try the other.
 	func dir<NewOut>(_ call: (Routes<OutType, OutType>) throws -> [Routes<OutType, NewOut>]) throws -> Routes<InType, NewOut> {
 		return try dir(call(root(OutType.self)))
 	}
