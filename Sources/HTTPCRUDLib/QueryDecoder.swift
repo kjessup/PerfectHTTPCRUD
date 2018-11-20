@@ -10,11 +10,11 @@ import Foundation
 private let ampChar = "&".utf8.first!
 private let eqChar = "=".utf8.first!
 
-private extension String {
-	init?(_ slice: ArraySlice<UInt8>) {
-		self.init(bytes: slice, encoding: .utf8)
-	}
-}
+//private extension String {
+//	init?(_ slice: ArraySlice<UInt8>) {
+//		self.init(bytes: slice, encoding: .utf8)
+//	}
+//}
 
 public struct QueryDecoder {
 	typealias A = Array<UInt8>
@@ -43,7 +43,7 @@ public struct QueryDecoder {
 			nameSlice = collection[triple.start..<triple.middle-1]
 			valueSlice = collection[triple.middle..<triple.end]
 		}
-		return (String(nameSlice) ?? "", valueSlice)
+		return (String(bytes: nameSlice, encoding: .utf8) ?? "", valueSlice)
 	}
 	
 	func triple2Value(_ triple: RangeTriple) -> ArraySlice<UInt8> {
@@ -58,7 +58,7 @@ public struct QueryDecoder {
 	
 	public func map<T>(_ call: ((String,String)) throws -> T) rethrows -> [T] {
 		return try mapBytes {
-			return try call(($0.0, String($0.1) ?? ""))
+			return try call(($0.0, String(bytes: $0.1, encoding: .utf8) ?? ""))
 		}
 	}
 	
@@ -74,7 +74,7 @@ public struct QueryDecoder {
 	}
 	
 	public subscript(_ key: String) -> [String] {
-		return get(key).map { String($0) ?? "" }
+		return get(key).map { String(bytes: $0, encoding: .utf8) ?? "" }
 	}
 	
 	mutating func build() {
@@ -126,7 +126,7 @@ public struct QueryDecoder {
 				} else {
 					nameSlice = collection[triple.start..<triple.middle-1]
 				}
-				if let name = String(nameSlice) {
+				if let name = String(bytes: nameSlice, encoding: .utf8) {
 					if let fnd = lookup[name] {
 						lookup[name] = fnd + [i]
 					} else {

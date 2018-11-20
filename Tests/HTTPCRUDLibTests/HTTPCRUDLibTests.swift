@@ -2,42 +2,115 @@ import XCTest
 import NIOHTTP1
 import NIO
 import PerfectCRUD
+import PerfectSQLite
+import PerfectCURL
 @testable import HTTPCRUDLib
 
-//class ShimHTTPRequest: HTTPRequest {
-//	var contentType: String?
-//	
-//	var contentConsumed: Int
-//	
-//	func readSomeContent() -> EventLoopFuture<[ByteBuffer]> {
-//		
-//	}
-//	
-//	func readContent() -> EventLoopFuture<HTTPRequestContentType> {
-//		
-//	}
-//	
-//	var path = ""
-//	var searchArgs: [(String, String)] = []
-//	var contentLength: Int = 0
-//	var contentRead: Int = 0
-//	var uriVariables: [String : String] = [:]
-//	var method = HTTPMethod.GET
-//	var uri = "" {
-//		didSet {
-//			let (p, a) = uri.splitUri
-//			path = p
-//			searchArgs = a
-//		}
-//	}
-//	var headers = HTTPHeaders()
-//	func readBody(_ call: @escaping (ByteBuffer?) -> ()) {
-//		call(nil)
-//	}
-//	
-//}
-
 final class HTTPCRUDLibTests: XCTestCase {
+	
+	func testRoot1() {
+		do {
+			let route = root { "OK" }.text()
+			let server = try route.bind(port: 42000).listen()
+			let req = try CURLRequest("http://localhost:42000/").perform()
+			XCTAssertEqual(req.bodyString, "OK")
+			try server.stop().wait()
+		} catch {
+			XCTFail("\(error)")
+		}
+	}
+	func testRoot2() {
+		do {
+			let route1 = root { "OK2" }.text()
+			let route2 = root { "OK1" }.foo { $0 }.text()
+			let server = try root().dir(route1, route2).bind(port: 42000).listen()
+			let resp1 = try CURLRequest("http://localhost:42000/foo").perform().bodyString
+			XCTAssertEqual(resp1, "OK1")
+			let resp2 = try CURLRequest("http://localhost:42000/").perform().bodyString
+			XCTAssertEqual(resp2, "OK2")
+			try server.stop().wait()
+		} catch {
+			XCTFail("\(error)")
+		}
+	}
+	func testDir1() {
+		do {
+			let route = try root().dir{[
+				$0.foo1 { "OK1" },
+				$0.foo2 { "OK2" },
+				$0.foo3 { "OK3" },
+				]}.text()
+			let server = try route.bind(port: 42000).listen()
+			let resp1 = try CURLRequest("http://localhost:42000/foo1").perform().bodyString
+			XCTAssertEqual(resp1, "OK1")
+			let resp2 = try CURLRequest("http://localhost:42000/foo2").perform().bodyString
+			XCTAssertEqual(resp2, "OK2")
+			let resp3 = try CURLRequest("http://localhost:42000/foo3").perform().bodyString
+			XCTAssertEqual(resp3, "OK3")
+			try server.stop().wait()
+		} catch {
+			XCTFail("\(error)")
+		}
+	}
+	func testDuplicates() {
+		do {
+			let route = try root().dir{[
+				$0.foo1 { "OK1" },
+				$0.foo1 { "OK2" },
+				$0.foo3 { "OK3" },
+				]}.text()
+			let server = try route.bind(port: 42000).listen()
+			try server.stop().wait()
+			XCTAssert(false)
+		} catch {
+			XCTAssert(true)
+		}
+	}
+	func testUriVars() {
+		struct Req: Codable {
+			let id: UUID
+			let action: String
+		}
+		do {
+			let route = root().v1
+				.wild(name: "id")
+				.wild(name: "action")
+				.decode(Req.self) { return "\($1.id) - \($1.action)" }
+				.text()
+			let id = UUID().uuidString
+			let action = "share"
+			let uri1 = "/v1/\(id)/\(action)"
+			let server = try route.bind(port: 42000).listen()
+			let resp1 = try CURLRequest("http://localhost:42000\(uri1)").perform().bodyString
+			XCTAssertEqual(resp1, "\(id) - \(action)")
+			try server.stop().wait()
+		} catch {
+			XCTAssert(true)
+		}
+	}
+	func testWildCard() {
+		do {
+			let route = root().wild { $1 }.foo.text()
+			let server = try route.bind(port: 42000).listen()
+			let req = try CURLRequest("http://localhost:42000/OK/foo").perform()
+			XCTAssertEqual(req.bodyString, "OK")
+			try server.stop().wait()
+		} catch {
+			XCTFail("\(error)")
+		}
+	}
+	func testTrailingWildCard() {
+		do {
+			let route = root().foo.trailing { $1 }.text()
+			let server = try route.bind(port: 42000).listen()
+			let req = try CURLRequest("http://localhost:42000/foo/OK/OK").perform()
+			XCTAssertEqual(req.bodyString, "OK/OK")
+			try server.stop().wait()
+		} catch {
+			XCTFail("\(error)")
+		}
+	}
+	
 	func testByteBufferCollection() {
 		let alloc = ByteBufferAllocator()
 		func b(_ s: String) -> ByteBuffer {
@@ -75,7 +148,6 @@ final class HTTPCRUDLibTests: XCTestCase {
 	}
 	func testQueryDecoder() {
 		let q = QueryDecoder(Array("a=1&b=2&c=3&d=4&b=5&e&f=&g=1234567890&h".utf8))
-		
 		XCTAssertEqual(q["not"], [])
 		XCTAssertEqual(q["a"], ["1"])
 		XCTAssertEqual(q["b"], ["2", "5"])
@@ -85,7 +157,6 @@ final class HTTPCRUDLibTests: XCTestCase {
 		XCTAssertEqual(q["f"], [""])
 		XCTAssertEqual(q["g"], ["1234567890"])
 		XCTAssertEqual(q["h"], [""])
-		
 		print("\(q.lookup)")
 		print("\(q.ranges)")
 	}
@@ -122,171 +193,15 @@ final class HTTPCRUDLibTests: XCTestCase {
 		}
 	}
 	
-    func testScratch() {
-		let uris = ["/v1/device/register",
-					"/v1/device/unregister",
-					"/v1/device/limits",
-					"/v1/device/update",
-					"/v1/device/share",
-					"/v1/device/share/token",
-					"/v1/device/unshare",
-					"/v1/device/obs/delete",
-					"/v1/device/limits",
-					"/v1/device/list",
-					"/v1/device/info",
-					"/v1/device/obs",
-					"/v1/group/create",
-					"/v1/group/device/add",
-					"/v1/group/device/remove",
-					"/v1/group/delete",
-					"/v1/group/update",
-					"/v1/group/device/list",
-					"/v1/group/list"]
-		struct DeviceRequest: Codable {
-			let id: UUID
-		}
-		struct GroupRequest: Codable {
-			let id: UUID?
-			let name: String?
-		}
-		typealias DeviceResponse = DeviceRequest
-		typealias GroupResponse = GroupRequest
-		
-		struct AuthorizedRequest {
-			let token: String
-			init?(_ request: HTTPRequest) {
-				token = "abc"
-			}
-		}
-		
-		let authorizedRoute = root(AuthorizedRequest.init)
-			.statusCheck { nil == $0 ? .unauthorized : .ok }
-			.then { $0! }
-		
-		let deviceRoutes = authorizedRoute
-			.device
-				.decode(DeviceRequest.self)
-				.dir {[
-					$0.register { DeviceResponse(id: $0.id) },
-					$0.share.token { DeviceResponse(id: $0.id) }
-				]}
-		
-		let groupRoutes = authorizedRoute
-			.group
-				.decode(GroupRequest.self)
-				.dir {[
-					$0.create { GroupResponse(id: $0.id, name: $0.name) }
-				]}
-		
-		let v1 = root()
-			.v1.dir(deviceRoutes.json(),
-					groupRoutes.json())
-		
-//		let request = ShimHTTPRequest()
-//		request.uri = "/v1/device/share/token?id=\(UUID().uuidString)"
-		let uri = "/v1/device/share/token"//request.path
-		let finder = try! RouteFinderDual(v1)
-		if let fnd = finder[.GET, uri] {
-//			let state = HandlerState(request: request, uri: uri)
-//			let output = try! fnd(state, request)
-//			print(String(validatingUTF8: output.body ?? [])!)
-		}
-	}
-	
-	func testExample() {
-		func p<O>(_ o: O, _ msg: String) -> O {
-			print(msg)
-			return o
-		}
-		struct Authenticator {
-			init?(_ request: HTTPRequest) {}
-		}
-		struct UserRequest: Codable {
-			let id: UUID
-		}
-		struct UserResponse: Codable {
-			let id: UUID
-			let msg: String
-		}
-		typealias DeviceRequest = UserRequest
-		typealias DeviceResponse = UserResponse
-		
-		let authenticatedRoute = root(Authenticator.init)
-			.statusCheck { nil == $0 ? .unauthorized : .ok }
-			.then { $0! }
-		
-		let user = authenticatedRoute
-			.user
-			.decode(UserRequest.self) { (auth: $0, user: $1) }
-		let device = authenticatedRoute
-			.device
-			.decode(DeviceRequest.self) { (auth: $0, user: $1) }
-
-		let fullRoutes = root()
-			.v1
-			.dir(
-				user.info { UserResponse(id: $0.1.id, msg: "i") },
-				user.wild { p($0, "wild: \($1)") }.info { UserResponse(id: $0.1.id, msg: "i") },
-				user.info.d { UserResponse(id: $0.1.id, msg: "id") },
-				user.share { UserResponse(id: $0.1.id, msg: "s") },
-				device.foo { DeviceResponse(id: $0.1.id, msg: "d") }
-			)
-		let fullJson = fullRoutes.path("json").json()
-		let fullText = fullRoutes.path("text").then { "\($0)" }.text()
-		let end = root().dir(fullText, fullJson)
-
-//		let request = ShimHTTPRequest()
-//		request.uriVariables = ["id":UUID().uuidString]
-
-		let uri1 = "/v1/user/share/json"
-		let uri2 = "/v1/user/FOOBAR/info/json"
-		let uri3 = "/v1/user/info/d/json"
-
-		let finder = try! RouteFinderRegExp(end)
-
-		if let fnd = finder[.GET, uri2] {
-//			let state = HandlerState(request: request, uri: uri2)
-//			let output = try! fnd(state, request)
-//			print(String(validatingUTF8: output.body ?? [])!)
-		}
-	}
-	
-	func testUriVars() {
-		struct Req: Codable {
-			let id: UUID
-			let action: String
-		}
-		let uri = root().v1
-			.wild(name: "id")
-			.wild(name: "action")
-			.decode(Req.self) { return "\($1.id) - \($1.action)" }
-			.text()
-		let finder = try! RouteFinderDual(uri)
-		let uu = UUID().uuidString
-		let uri1 = "/v1/\(uu)/share"
-//		let request = ShimHTTPRequest()
-//		request.uri = uri1
-//		let output = try! request.run(finder: finder)!
-//		XCTAssertEqual("\(uu) - share", String(validatingUTF8: output.body ?? [])!)
-	}
-	
-	func testToDo() {
-		struct Item: Codable {
-			let text: String
-		}
-		struct List: Codable {
-			let name: String
-			let items: [Item]
-		}
-		struct ListRequest: Codable {
-			
-		}
-		
-		
-		
-	}
-	
     static var allTests = [
-        ("testExample", testExample),
+		("testRoot1", testRoot1),
+		("testRoot2", testRoot2),
+		("testDir1", testDir1),
+		("testDuplicates", testDuplicates),
+		("testUriVars", testUriVars),
+		("testWildCard", testWildCard),
+		("testTrailingWildCard", testTrailingWildCard),
+		
+		("testQueryDecoder", testQueryDecoder),
     ]
 }

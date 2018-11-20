@@ -1,4 +1,4 @@
-import PerfectHTTP
+
 import Foundation
 
 public typealias ComponentGenerator = IndexingIterator<[String]>

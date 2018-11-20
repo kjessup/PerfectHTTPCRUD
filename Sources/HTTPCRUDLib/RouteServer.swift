@@ -8,7 +8,6 @@
 import NIO
 import NIOHTTP1
 import Foundation
-import PerfectNet
 
 /* TODO
 struct requestinfoforlogging {
@@ -36,33 +35,9 @@ public protocol HTTPRequest {
 	func readContent() -> EventLoopFuture<HTTPRequestContentType>
 }
 
-public protocol HTTPOutput {
-	var status: HTTPResponseStatus? { get }
-	var headers: HTTPHeaders? { get }
-	var body: [UInt8]? { get }
-}
-
-public struct HTTPOutputError: HTTPOutput, Error {
-	public let status: HTTPResponseStatus?
-	public let headers: HTTPHeaders?
-	public let body: [UInt8]?
-	public init(status: HTTPResponseStatus,
-		headers: HTTPHeaders? = nil,
-		body: [UInt8]? = nil) {
-		self.status = status
-		self.headers = headers
-		self.body = body
-	}
-	public init(status: HTTPResponseStatus, description: String) {
-		let chars = Array(description.utf8)
-		self.status = status
-		headers = HTTPHeaders([("content-type", "text/plain"), ("content-length", "\(chars.count)")])
-		body = chars
-	}
-}
-
 public protocol ListeningRoutes {
-	func stop()
+	@discardableResult
+	func stop() -> ListeningRoutes
 	func wait() throws
 }
 
@@ -70,24 +45,6 @@ public protocol BoundRoutes {
 	var port: Int { get }
 	var address: String { get }
 	func listen() throws -> ListeningRoutes
-}
-
-struct JSONOutput<E: Encodable>: HTTPOutput {
-	var status: HTTPResponseStatus? { return nil }
-	var headers: HTTPHeaders? = HTTPHeaders([("content-type", "application/json")])
-	let body: [UInt8]?
-	init(_ encodable: E) throws {
-		body = Array(try JSONEncoder().encode(encodable))
-	}
-}
-
-struct TextOutput<C: CustomStringConvertible>: HTTPOutput {
-	var status: HTTPResponseStatus? { return nil }
-	var headers: HTTPHeaders? = HTTPHeaders([("content-type", "text/plain")])
-	let body: [UInt8]?
-	init(_ c: C) {
-		body = Array("\(c)".utf8)
-	}
 }
 
 func configureHTTPServerPipeline(pipeline: ChannelPipeline,
@@ -196,8 +153,10 @@ class NIOListeningRoutes: ListeningRoutes {
 //		channel.read()
 		f = channel.closeFuture
 	}
-	public func stop() {
+	@discardableResult
+	public func stop() -> ListeningRoutes {
 		channel.close(promise: nil)
+		return self
 	}
 	public func wait() throws {
 		try f.wait()

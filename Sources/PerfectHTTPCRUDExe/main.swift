@@ -18,21 +18,21 @@ func printTupes(_ t: QueryDecoder) {
 
 checkCRUDRoutes()
 
-let dataRoutes = root().GET.dir{[
+let dataRoutes = try root().GET.dir {[
 	$0.empty { "" },
 	$0.2048 { big2048 },
 	$0.8192 { big8192 },
 	$0.32768 { big32768 },
 ]}
 
-let argsRoutes: Routes<HTTPRequest, String> = root().dir{[
+let argsRoutes: Routes<HTTPRequest, String> = try root().dir {[
 	$0.GET.getArgs2048 {
 		if let qd = $0.searchArgs {
 			printTupes(qd)
 		}
 		return big2048
 	},
-	$0.POST.dir{[
+	try $0.POST.dir{[
 		$0.postArgs2048.readBody {
 			if case .urlForm(let params) = $1 {
 				printTupes(params)
@@ -84,7 +84,7 @@ let delete = root().POST.delete.decode(CRUDUserRequest.self).db(try crudDB()) {
 }.json()
 
 let crudUserRoutes: Routes<HTTPRequest, HTTPOutput> =
-	root()
+	try root()
 		.statusCheck { crudRoutesEnabled ? .ok : .internalServerError }
 		.user
 		.dir(
@@ -93,7 +93,7 @@ let crudUserRoutes: Routes<HTTPRequest, HTTPOutput> =
 			update,
 			delete)
 
-let routes: Routes<HTTPRequest, HTTPOutput> = root()
+let routes: Routes<HTTPRequest, HTTPOutput> = try root()
 //	.then { print($0.uri) ; return $0 }
 	.dir(dataRoutes.text(),
 		 argsRoutes.text(),
