@@ -20,9 +20,9 @@ checkCRUDRoutes()
 
 let dataRoutes = root().GET.dir{[
 	$0.empty { "" },
-	$0.path("2048") { big2048 },
-	$0.path("8192") { big8192 },
-	$0.path("32768") { big32768 },
+	$0.2048 { big2048 },
+	$0.8192 { big8192 },
+	$0.32768 { big32768 },
 ]}
 
 let argsRoutes: Routes<HTTPRequest, String> = root().dir{[

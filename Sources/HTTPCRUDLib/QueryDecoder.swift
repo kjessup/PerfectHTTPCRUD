@@ -12,8 +12,7 @@ private let eqChar = "=".utf8.first!
 
 private extension String {
 	init?(_ slice: ArraySlice<UInt8>) {
-		var s = slice
-		self.init(bytesNoCopy: &s, length: slice.count, encoding: .utf8, freeWhenDone: false)
+		self.init(bytes: slice, encoding: .utf8)
 	}
 }
 
@@ -119,7 +118,7 @@ public struct QueryDecoder {
 			let i = ranges.count
 			ranges.append(triple)
 			do {
-				let nameSlice: ArraySlice<UInt8>
+				var nameSlice: ArraySlice<UInt8>
 				if triple.middle == collection.endIndex {
 					nameSlice = collection[triple.start...]
 				} else if collection[triple.middle - 1] != eqChar {
@@ -127,11 +126,11 @@ public struct QueryDecoder {
 				} else {
 					nameSlice = collection[triple.start..<triple.middle-1]
 				}
-				if let s = String(nameSlice) {
-					if let fnd = lookup[s] {
-						lookup[s] = fnd + [i]
+				if let name = String(nameSlice) {
+					if let fnd = lookup[name] {
+						lookup[name] = fnd + [i]
 					} else {
-						lookup[s] = [i]
+						lookup[name] = [i]
 					}
 				}
 			}
