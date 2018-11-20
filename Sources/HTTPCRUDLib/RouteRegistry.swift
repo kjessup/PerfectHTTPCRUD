@@ -253,6 +253,9 @@ public extension Routes {
 			paths: {$0 + ext},
 			funcs: {
 				$0.thenThrowing {
+					if let c = contentType {
+						$0.state.response.addHeader(name: "content-type", value: c)
+					}
 					return RouteValueBox($0.state, try call($0.value))
 				}
 			}

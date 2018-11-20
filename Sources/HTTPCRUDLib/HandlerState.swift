@@ -19,6 +19,12 @@ class DefaultHTTPOutput: HTTPOutput {
 		headers = h
 		body = b
 	}
+	func addHeader(name: String, value: String) {
+		if nil == headers {
+			headers = HTTPHeaders()
+		}
+		headers?.add(name: name, value: value)
+	}
 }
 
 final class HandlerState {
