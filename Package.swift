@@ -14,11 +14,14 @@ let package = Package(
 		.package(url: "https://github.com/PerfectlySoft/Perfect-SQLite.git", from: "3.0.0"),
 		.package(url: "https://github.com/PerfectlySoft/Perfect-CRUD.git", from: "1.0.0"),
 		.package(url: "https://github.com/PerfectlySoft/Perfect-CURL.git", from: "3.0.0"),
-		.package(url: "https://github.com/apple/swift-nio.git", from: "1.11.0")
+//		.package(url: "https://github.com/apple/swift-nio.git", from: "1.11.0"),
+		.package(url: "https://github.com/kjessup/swift-nio.git", .branch("master")),
+		
+		.package(url: "https://github.com/apple/swift-nio-ssl.git", from: "1.3.2"),
 	],
 	targets: [
 		.target(name: "PerfectHTTPCRUDExe", dependencies: ["HTTPCRUDLib", "PerfectSQLite"]),
-		.target(name: "HTTPCRUDLib", dependencies: ["PerfectMustache", "PerfectLib", "PerfectCRUD", "NIOHTTP1"]),
+		.target(name: "HTTPCRUDLib", dependencies: ["PerfectMustache", "PerfectLib", "PerfectCRUD", "NIOHTTP1", "NIOOpenSSL"]),
 		.testTarget(name: "HTTPCRUDLibTests", dependencies: ["HTTPCRUDLib", "PerfectSQLite", "PerfectCURL"]),
 	]
 )

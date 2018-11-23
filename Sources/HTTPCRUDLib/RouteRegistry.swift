@@ -45,9 +45,6 @@ struct RouteRegistry<InType, OutType>: CustomStringConvertible {
 	init(routes: [Tuple]) {
 		self.init(Dictionary(uniqueKeysWithValues: routes))
 	}
-//	func then<NewOut>(_ call: @escaping (OutType) throws -> NewOut) -> RouteRegistry<InType, NewOut> {
-//		return .init(routes: routes.map { let (p, f) = $0; return (p, {try call(f($0))}) })
-//	}
 	func append<NewOut>(_ registry: RouteRegistry<OutType, NewOut>) -> RouteRegistry<InType, NewOut> {
 		let a = routes.flatMap {
 			(t: Tuple) -> [RouteRegistry<InType, NewOut>.Tuple] in
@@ -64,9 +61,6 @@ struct RouteRegistry<InType, OutType>: CustomStringConvertible {
 		}
 		return .init(routes: a)
 	}
-//	func combine(_ registries: [RouteRegistry<InType, OutType>]) -> RouteRegistry<InType, OutType> {
-//		return .init(routes: routes + registries.flatMap { $0.routes })
-//	}
 	func validate() throws {
 		let paths = routes.map { $0.0 }.sorted()
 		var dups = Set<String>()

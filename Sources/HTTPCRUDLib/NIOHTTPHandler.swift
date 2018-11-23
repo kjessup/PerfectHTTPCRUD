@@ -8,20 +8,6 @@
 import NIO
 import NIOHTTP1
 
-//func timeit<T>(name: String, _ call: () -> T) -> T {
-//	var tvalBefore = timeval()
-//	gettimeofday(&tvalBefore, nil)
-//
-//	let a = call()
-//
-//	var tvalAfter = timeval()
-//	gettimeofday(&tvalAfter, nil)
-//	let diff = (Int(tvalAfter.tv_sec - tvalBefore.tv_sec) * 1000000 + Int(tvalAfter.tv_usec)) - Int(tvalBefore.tv_usec)
-//	print("\(name) timed \(diff)")
-//
-//	return a
-//}
-
 public extension Routes {
 	func async<NewOut>(_ call: @escaping (OutType, EventLoopPromise<NewOut>) -> ()) -> Routes<InType, NewOut> {
 		return applyFuncs {

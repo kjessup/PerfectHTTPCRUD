@@ -7,6 +7,7 @@
 
 import NIO
 import NIOHTTP1
+import NIOOpenSSL
 import Foundation
 
 /* TODO
@@ -47,24 +48,19 @@ public protocol BoundRoutes {
 	func listen() throws -> ListeningRoutes
 }
 
-func configureHTTPServerPipeline(pipeline: ChannelPipeline,
-								 first: Bool = false,
-								 withPipeliningAssistance pipelining: Bool = true,
-								 withServerUpgrade upgrade: HTTPUpgradeConfiguration? = nil,
-								 withErrorHandling errorHandling: Bool = false) -> EventLoopFuture<Void> {
+func configureHTTPServerPipeline(pipeline: ChannelPipeline, tls: TLSConfiguration?) -> EventLoopFuture<Void> {
 	let responseEncoder = HTTPResponseEncoder()
-	let requestDecoder = HTTPRequestDecoder(leftOverBytesStrategy: upgrade == nil ? .dropBytes : .forwardBytes)
-	
-	var handlers: [ChannelHandler] = [responseEncoder, requestDecoder]
-	
-	if pipelining {
-		handlers.append(HTTPServerPipelineHandler())
+	let requestDecoder = HTTPRequestDecoder(leftOverBytesStrategy: .dropBytes)
+	var handlers: [ChannelHandler] = []
+	if let configuration = tls {
+		let sslContext = try! SSLContext(configuration: configuration)
+		let handler = try! OpenSSLServerHandler(context: sslContext)
+		handlers.append(handler)
 	}
-	
-//	if errorHandling {
-//		handlers.append(HTTPServerProtocolErrorHandler())
-//	}
-	
+	handlers.append(responseEncoder)
+	handlers.append(requestDecoder)
+	handlers.append(HTTPServerPipelineHandler())
+	handlers.append(HTTPServerProtocolErrorHandler())
 //	if let (upgraders, completionHandler) = upgrade {
 //		let upgrader = HTTPServerUpgradeHandler(upgraders: upgraders,
 //												httpEncoder: responseEncoder,
@@ -72,8 +68,7 @@ func configureHTTPServerPipeline(pipeline: ChannelPipeline,
 //												upgradeCompletionHandler: completionHandler)
 //		handlers.append(upgrader)
 //	}
-	
-	return pipeline.addHandlers(handlers, first: first)
+	return pipeline.addHandlers(handlers, first: false)
 }
 
 class NIOBoundRoutes: BoundRoutes {
@@ -86,7 +81,8 @@ class NIOBoundRoutes: BoundRoutes {
 	init(registry: RegistryType,
 		 port: Int,
 		 address: String,
-		 threadGroup: EventLoopGroup?
+		 threadGroup: EventLoopGroup?,
+		 tls: TLSConfiguration?
 		) throws {
 		let ag = MultiThreadedEventLoopGroup(numberOfThreads: 1)
 		acceptGroup = ag
@@ -108,11 +104,10 @@ class NIOBoundRoutes: BoundRoutes {
 			.childChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
 			.childChannelOption(ChannelOptions.autoRead, value: true)
 			.childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
-			.childChannelOption(ChannelOptions.recvAllocator, value:FixedSizeRecvByteBufferAllocator(capacity: 1024*16))
-				//AdaptiveRecvByteBufferAllocator(minimum: 1024, initial: 4096, maximum: 65536))
+			.childChannelOption(ChannelOptions.recvAllocator, value: AdaptiveRecvByteBufferAllocator(minimum: 1024, initial: 4096, maximum: 65536))
 			.childChannelInitializer {
 				channel in
-				configureHTTPServerPipeline(pipeline: channel.pipeline)
+				configureHTTPServerPipeline(pipeline: channel.pipeline, tls: tls)
 				.then {
 					channel.pipeline.add(handler: NIOHTTPHandler(finder: finder))
 				}
@@ -166,13 +161,14 @@ class NIOListeningRoutes: ListeningRoutes {
 //let serverThreadGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount*2)
 
 public extension Routes where InType == HTTPRequest, OutType == HTTPOutput {
-	func bind(port: Int, address: String = "0.0.0.0") throws -> BoundRoutes {
+	func bind(port: Int, address: String = "0.0.0.0", tls: TLSConfiguration? = nil) throws -> BoundRoutes {
 		return try NIOBoundRoutes(registry: self,
 								  port: port,
 								  address: address,
-								  threadGroup: MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount))
+								  threadGroup: MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount),
+								  tls: tls)
 	}
-	func bind(count: Int, port: Int, address: String = "0.0.0.0") throws -> [BoundRoutes] {
+	func bind(count: Int, port: Int, address: String = "0.0.0.0", tls: TLSConfiguration? = nil) throws -> [BoundRoutes] {
 		if count == 1 {
 			return [try bind(port: port, address: address)]
 		}
@@ -180,7 +176,8 @@ public extension Routes where InType == HTTPRequest, OutType == HTTPOutput {
 			return try NIOBoundRoutes(registry: self,
 									  port: port,
 									  address: address,
-									  threadGroup: nil)
+									  threadGroup: nil,
+									  tls: tls)
 		}
 	}
 }
