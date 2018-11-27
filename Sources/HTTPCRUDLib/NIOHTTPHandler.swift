@@ -8,7 +8,31 @@
 import NIO
 import NIOHTTP1
 
+/// An object given to a content streamer
+public struct StreamToken {
+	let state: HandlerState
+	let promise: EventLoopPromise<HTTPOutput>
+	/// Push a chunk of bytes to the client.
+	/// An error thrown from this call will generally indicate that the client has closed the connection.
+	public func push(_ bytes: [UInt8]) throws {
+		let output: DefaultHTTPOutput
+		if state.request.writeState == .none {
+			let def = state.response
+			output = DefaultHTTPOutput(status: def.status, headers: def.headers, body: bytes)
+		} else {
+			output = DefaultHTTPOutput(status: nil, headers: HTTPHeaders(), body: bytes)
+		}
+		state.request.write(output: output)
+	}
+	/// Complete the response streaming.
+	public func complete() {
+		promise.succeed(result: state.response)
+	}
+}
+
 public extension Routes {
+	/// Run the call asynchronously on a non-event loop thread.
+	/// Caller must succeed or fail the given promise to continue the request.
 	func async<NewOut>(_ call: @escaping (OutType, EventLoopPromise<NewOut>) -> ()) -> Routes<InType, NewOut> {
 		return applyFuncs {
 			input in
@@ -16,6 +40,21 @@ public extension Routes {
 				box in
 				let p: EventLoopPromise<NewOut> = input.eventLoop.newPromise()
 				foreignEventsQueue.async { call(box.value, p) }
+				return p.futureResult.map { return RouteValueBox(box.state, $0) }
+			}
+		}
+	}
+	/// Stream bytes to the client. Caller should use the `StreamToken` to send data in chunks.
+	/// Caller must call `StreamToken.complete()` when done.
+	/// Response data is always sent using chunked encoding.
+	func stream(_ call: @escaping (OutType, StreamToken) -> ()) -> Routes<InType, HTTPOutput> {
+		return applyFuncs {
+			input in
+			return input.then {
+				box in
+				let p: EventLoopPromise<HTTPOutput> = input.eventLoop.newPromise()
+				let token = StreamToken(state: box.state, promise: p)
+				foreignEventsQueue.async { call(box.value, token) }
 				return p.futureResult.map { return RouteValueBox(box.state, $0) }
 			}
 		}

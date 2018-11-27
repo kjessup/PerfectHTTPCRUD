@@ -336,6 +336,27 @@ final class HTTPCRUDLibTests: XCTestCase {
 		}
 	}
 	
+	func testStream() {
+		do {
+			let route = root().stream {
+				req, token in
+				do {
+					for i in 0..<16 {
+						let toSend = String(repeating: "\(i % 10)", count: 1024)
+						try token.push(Array(toSend.utf8))
+					}
+					token.complete()
+				} catch {}
+			}
+			let server = try route.bind(port: 42000).listen()
+			let req = try CURLRequest("http://localhost:42000/").perform()
+			XCTAssertEqual(req.bodyString.count, 16384)
+			try server.stop().wait()
+		} catch {
+			XCTFail("\(error)")
+		}
+	}
+	
     static var allTests = [
 		("testRoot1", testRoot1),
 		("testRoot2", testRoot2),

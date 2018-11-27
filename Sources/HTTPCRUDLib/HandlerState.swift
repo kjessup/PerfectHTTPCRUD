@@ -13,7 +13,7 @@ class DefaultHTTPOutput: HTTPOutput {
 	var headers: HTTPHeaders? = nil
 	var body: [UInt8]? = nil
 	init(status s: HTTPResponseStatus? = .ok,
-		 headers h: HTTPHeaders = HTTPHeaders(),
+		 headers h: HTTPHeaders? = nil,
 		 body b: [UInt8]? = nil) {
 		status = s
 		headers = h
